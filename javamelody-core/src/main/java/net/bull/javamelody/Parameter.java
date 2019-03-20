@@ -19,6 +19,8 @@ package net.bull.javamelody;
 
 import java.util.Locale;
 
+import net.bull.javamelody.internal.common.Parameters;
+
 /**
  * Liste des paramètres, tous optionnels.
  * @author Emeric Vernat
@@ -200,6 +202,11 @@ public enum Parameter {
 	CSRF_PROTECTION_ENABLED("csrf-protection-enabled"),
 
 	/**
+	 * Valeur de l'entête http X-Frame-Options, par exemple, DENY, SAMEORIGIN, ALLOW-FROM http://example.com, ALLOWALL (SAMEORIGIN par défaut).
+	 */
+	X_FRAME_OPTIONS("x-frame-options"),
+
+	/**
 	 * Expression régulière (null par défaut) pour restreindre l'accès au monitoring à certaines adresses IP.
 	 */
 	ALLOWED_ADDR_PATTERN("allowed-addr-pattern"),
@@ -258,6 +265,13 @@ public enum Parameter {
 	ADMIN_EMAILS("admin-emails"),
 
 	/**
+	 * Used to specify prefix of the subject of the email notifications sent out by Javamelody.
+	 * Supports one argument index {0} which will be replaced by application name at runtime.<br>
+	 * For e.g. : Production environment JavaMelody Reports for {0} (Monitoring JavaMelody on {0} by default).
+	 */
+	MAIL_SUBJECT_PREFIX("mail-subject-prefix"),
+
+	/**
 	 * Liste des périodes d'envoi des mails séparées par des virgules
 	 * pour l'envoi par mail de rapport de hebdomadaire.
 	 * Les périodes doivent être "day", "week" ou "month" ("week" par défaut).
@@ -310,8 +324,8 @@ public enum Parameter {
 	/**
 	 * Name of a class to use for JavaMelody logs (default: null for detection of Logback, Log4J or java.util.logging). <br/>
 	 * The class must implement the interface {@link net.bull.javamelody.JavaMelodyLogger},
-	 * such as {@link net.bull.javamelody.Log4JLogger}, {@link net.bull.javamelody.Log4J2Logger}, {@link net.bull.javamelody.JavaLogger}
-	 * or {@link net.bull.javamelody.LogbackLogger}.
+	 * such as net.bull.javamelody.internal.common.Log4JLogger, net.bull.javamelody.internal.common.Log4J2Logger,
+	 * net.bull.javamelody.internal.common.JavaLogger or net.bull.javamelody.internal.common.LogbackLogger.
 	 */
 	LOGGER_CLASS("logger-class"),
 
@@ -347,10 +361,33 @@ public enum Parameter {
 	GRAPHITE_ADDRESS("graphite-address"),
 
 	/**
+	 * Address of the <a href='https://github.com/etsy/statsd'>StatsD</a> server to send metrics to,
+	 * for example: 11.22.33.44:8125 (null by default).
+	 */
+	STATSD_ADDRESS("statsd-address"),
+
+	/**
 	 * Namespace to use in <a href='https://aws.amazon.com/cloudwatch/'>AWS CloudWatch</a> to send metrics,
 	 * for example "MyCompany/MyAppDomain" (null by default).
 	 */
-	CLOUDWATCH_NAMESPACE("cloudwatch-namespace");
+	CLOUDWATCH_NAMESPACE("cloudwatch-namespace"),
+
+	/**
+	 * Bucket name to use <a href='https://aws.amazon.com/s3/'>AWS S3</a> to send heap dump files (null by default).
+	 */
+	HEAP_DUMP_S3_BUCKETNAME("heap-dump-s3-bucketname"),
+
+	/**
+	 * URL of the <a href='https://www.influxdata.com/time-series-platform/'>InfluxDB</a> server to send metrics to,
+	 * for example: http://11.22.33.44:8086/write?db=mydb (null by default).
+	 */
+	INFLUXDB_URL("influxdb-url"),
+
+	/**
+	 * API key of the <a href='https://www.datadoghq.com/'>Datadog</a> to send metrics,
+	 * for example: 9775a026f1ca7d1c6c5af9d94d9595a4 (null by default).
+	 */
+	DATADOG_API_KEY("datadog-api-key");
 
 	private final String code;
 
@@ -363,6 +400,29 @@ public enum Parameter {
 	 */
 	public String getCode() {
 		return code;
+	}
+
+	/**
+	 * @return valeur du paramètre
+	 */
+	public String getValue() {
+		return Parameters.getParameterValue(this);
+	}
+
+	/**
+	 * @return valeur du paramètre
+	 */
+	public boolean getValueAsBoolean() { // NOPMD
+		return Boolean.parseBoolean(getValue());
+	}
+
+	/**
+	 * Définit la valeur d'un paramètre en tant que propriété système.
+	 * @param value Valeur
+	 */
+	public void setValue(String value) {
+		assert value != null;
+		System.setProperty(Parameters.PARAMETER_SYSTEM_PREFIX + getCode(), value);
 	}
 
 	static Parameter valueOfIgnoreCase(String parameter) {

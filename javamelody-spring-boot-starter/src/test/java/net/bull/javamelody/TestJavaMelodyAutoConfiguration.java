@@ -24,7 +24,6 @@ import java.util.Map;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -77,7 +76,7 @@ public class TestJavaMelodyAutoConfiguration {
 		assertThat(registrationBean).isInstanceOf(FilterRegistrationBean.class);
 
 		// It should create a filter registration bean with the appropriately configured monitoring filter.
-		final FilterRegistrationBean filterRegistrationBean = (FilterRegistrationBean) registrationBean;
+		final FilterRegistrationBean<MonitoringFilter> filterRegistrationBean = (FilterRegistrationBean<MonitoringFilter>) registrationBean;
 		assertThat(filterRegistrationBean.getFilter()).isNotNull();
 		assertThat(filterRegistrationBean.getFilter()).isInstanceOf(MonitoringFilter.class);
 		assertThat(filterRegistrationBean.getInitParameters()).containsEntry("log", "true");
@@ -86,14 +85,13 @@ public class TestJavaMelodyAutoConfiguration {
 		assertThat(filterRegistrationBean.getUrlPatterns()).containsExactly("/*");
 
 		// It should create the monitoring filter with the application type "Spring Boot".
-		final MonitoringFilter monitoringFilter = (MonitoringFilter) filterRegistrationBean
-				.getFilter();
+		final MonitoringFilter monitoringFilter = filterRegistrationBean.getFilter();
 		assertThat(monitoringFilter.getApplicationType()).isEqualTo("Spring Boot");
 
-		// It should create an auto-proxy creator.
-		final DefaultAdvisorAutoProxyCreator autoProxyCreator = context
-				.getBean(DefaultAdvisorAutoProxyCreator.class);
-		assertThat(autoProxyCreator).isNotNull();
+		// It should not create anymore an auto-proxy creator.
+		//		final DefaultAdvisorAutoProxyCreator autoProxyCreator = context
+		//				.getBean(DefaultAdvisorAutoProxyCreator.class);
+		//		assertThat(autoProxyCreator).isNotNull();
 
 		// It should create a bean post-processor for data sources.
 		final SpringDataSourceBeanPostProcessor dataSourcePostProcessor = context

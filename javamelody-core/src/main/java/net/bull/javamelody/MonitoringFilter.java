@@ -20,6 +20,8 @@ package net.bull.javamelody;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -35,6 +37,21 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import net.bull.javamelody.internal.common.HttpParameter;
+import net.bull.javamelody.internal.common.HttpPart;
+import net.bull.javamelody.internal.common.LOG;
+import net.bull.javamelody.internal.common.Parameters;
+import net.bull.javamelody.internal.model.Collector;
+import net.bull.javamelody.internal.model.Counter;
+import net.bull.javamelody.internal.model.CounterError;
+import net.bull.javamelody.internal.model.CounterRequestContext;
+import net.bull.javamelody.internal.model.LabradorRetriever;
+import net.bull.javamelody.internal.model.ThreadInformations;
+import net.bull.javamelody.internal.web.CounterServletResponseWrapper;
+import net.bull.javamelody.internal.web.HttpAuth;
+import net.bull.javamelody.internal.web.MonitoringController;
+import net.bull.javamelody.internal.web.RumInjector;
+
 /**
  * Filtre de servlet pour le monitoring.
  * C'est la classe de ce filtre qui doit être déclarée dans le fichier web.xml de la webapp.
@@ -45,6 +62,8 @@ public class MonitoringFilter implements Filter {
 	private static boolean instanceCreated;
 
 	private static final List<String> CONTEXT_PATHS = new ArrayList<String>();
+
+	private static URL unregisterApplicationNodeInCollectServerUrl;
 
 	private boolean instanceEnabled;
 
@@ -119,7 +138,7 @@ public class MonitoringFilter implements Filter {
 		this.filterConfig = config;
 		this.servletApi2 = config.getServletContext().getMajorVersion() < 3;
 		Parameters.initialize(config);
-		monitoringDisabled = Boolean.parseBoolean(Parameters.getParameter(Parameter.DISABLED));
+		monitoringDisabled = Parameter.DISABLED.getValueAsBoolean();
 		if (monitoringDisabled) {
 			return;
 		}
@@ -133,12 +152,11 @@ public class MonitoringFilter implements Filter {
 		this.httpCounter = collector.getCounterByName(Counter.HTTP_COUNTER_NAME);
 		this.errorCounter = collector.getCounterByName(Counter.ERROR_COUNTER_NAME);
 
-		logEnabled = Boolean.parseBoolean(Parameters.getParameter(Parameter.LOG));
-		rumEnabled = Boolean.parseBoolean(Parameters.getParameter(Parameter.RUM_ENABLED));
-		if (Parameters.getParameter(Parameter.URL_EXCLUDE_PATTERN) != null) {
+		logEnabled = Parameter.LOG.getValueAsBoolean();
+		rumEnabled = Parameter.RUM_ENABLED.getValueAsBoolean();
+		if (Parameter.URL_EXCLUDE_PATTERN.getValue() != null) {
 			// lance une PatternSyntaxException si la syntaxe du pattern est invalide
-			urlExcludePattern = Pattern
-					.compile(Parameters.getParameter(Parameter.URL_EXCLUDE_PATTERN));
+			urlExcludePattern = Pattern.compile(Parameter.URL_EXCLUDE_PATTERN.getValue());
 		}
 
 		final long duration = System.currentTimeMillis() - start;
@@ -201,13 +219,9 @@ public class MonitoringFilter implements Filter {
 			HttpServletResponse httpResponse) throws IOException, ServletException {
 		final long start = System.currentTimeMillis();
 		final long startCpuTime = ThreadInformations.getCurrentThreadCpuTime();
-		HttpServletResponse httpResponse2 = httpResponse;
-		if (rumEnabled) {
-			httpResponse2 = RumInjector.createRumResponseWrapper(httpRequest, httpResponse,
-					getRequestName(httpRequest));
-		}
-		final CounterServletResponseWrapper wrappedResponse = new CounterServletResponseWrapper(
-				httpResponse2);
+		final long startAllocatedBytes = ThreadInformations.getCurrentThreadAllocatedBytes();
+		final CounterServletResponseWrapper wrappedResponse = createResponseWrapper(httpRequest,
+				httpResponse);
 		final HttpServletRequest wrappedRequest = createRequestWrapper(httpRequest,
 				wrappedResponse);
 		boolean systemError = false;
@@ -217,8 +231,8 @@ public class MonitoringFilter implements Filter {
 		try {
 			JdbcWrapper.ACTIVE_THREAD_COUNT.incrementAndGet();
 			// on binde le contexte de la requête http pour les requêtes sql
-			httpCounter.bindContext(requestName, completeRequestName, httpRequest.getRemoteUser(),
-					startCpuTime);
+			httpCounter.bindContext(requestName, completeRequestName, httpRequest,
+					httpRequest.getRemoteUser(), startCpuTime, startAllocatedBytes);
 			// on binde la requête http (utilisateur courant et requête complète) pour les derniers logs d'erreurs
 			httpRequest.setAttribute(CounterError.REQUEST_KEY, completeRequestName);
 			CounterError.bindRequest(httpRequest);
@@ -240,7 +254,6 @@ public class MonitoringFilter implements Filter {
 			try {
 				// Si la durée est négative (arrive bien que rarement en cas de synchronisation d'horloge système),
 				// alors on considère que la durée est 0.
-
 				// Rq : sous Windows XP, currentTimeMillis a une résolution de 16ms environ
 				// (discrètisation de la durée en 0, 16 ou 32 ms, etc ...)
 				// et sous linux ou Windows Vista la résolution est bien meilleure.
@@ -248,19 +261,24 @@ public class MonitoringFilter implements Filter {
 				// voir aussi http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=6440250)
 				// et car des millisecondes suffisent pour une requête http
 				final long duration = Math.max(System.currentTimeMillis() - start, 0);
-				final long cpuUsedMillis = (ThreadInformations.getCurrentThreadCpuTime()
-						- startCpuTime) / 1000000;
+				final int cpuUsedMillis = (int) ((ThreadInformations.getCurrentThreadCpuTime()
+						- startCpuTime) / 1000000L);
+				final int allocatedKBytes;
+				if (startAllocatedBytes >= 0) {
+					allocatedKBytes = (int) ((ThreadInformations.getCurrentThreadAllocatedBytes()
+							- startAllocatedBytes) / 1024L);
+				} else {
+					allocatedKBytes = -1;
+				}
 
 				JdbcWrapper.ACTIVE_THREAD_COUNT.decrementAndGet();
-
 				putUserInfoInSession(httpRequest);
-
 				if (systemException != null) {
 					systemError = true;
 					final StringWriter stackTrace = new StringWriter(200);
 					systemException.printStackTrace(new PrintWriter(stackTrace));
 					errorCounter.addRequestForSystemError(systemException.toString(), duration,
-							cpuUsedMillis, stackTrace.toString());
+							cpuUsedMillis, allocatedKBytes, stackTrace.toString());
 				} else if (wrappedResponse.getCurrentStatus() >= HttpServletResponse.SC_BAD_REQUEST
 						&& wrappedResponse
 								.getCurrentStatus() != HttpServletResponse.SC_UNAUTHORIZED) {
@@ -268,9 +286,10 @@ public class MonitoringFilter implements Filter {
 					systemError = true;
 					errorCounter.addRequestForSystemError(
 							"Error" + wrappedResponse.getCurrentStatus(), duration, cpuUsedMillis,
-							null);
+							allocatedKBytes, null);
 				}
-
+				// prise en compte de Spring bestMatchingPattern s'il y a
+				requestName = CounterRequestContext.getHttpRequestName(httpRequest, requestName);
 				// taille du flux sortant
 				final int responseSize = wrappedResponse.getDataLength();
 				// nom identifiant la requête
@@ -281,8 +300,8 @@ public class MonitoringFilter implements Filter {
 				}
 
 				// on enregistre la requête dans les statistiques
-				httpCounter.addRequest(requestName, duration, cpuUsedMillis, systemError,
-						responseSize);
+				httpCounter.addRequest(requestName, duration, cpuUsedMillis, allocatedKBytes,
+						systemError, responseSize);
 				// on log sur Log4J ou java.util.logging dans la catégorie correspond au nom du filtre dans web.xml
 				log(httpRequest, requestName, duration, systemError, responseSize);
 			} finally {
@@ -295,6 +314,16 @@ public class MonitoringFilter implements Filter {
 				CounterError.unbindRequest();
 			}
 		}
+	}
+
+	protected CounterServletResponseWrapper createResponseWrapper(HttpServletRequest httpRequest,
+			HttpServletResponse httpResponse) {
+		HttpServletResponse httpResponse2 = httpResponse;
+		if (rumEnabled) {
+			httpResponse2 = RumInjector.createRumResponseWrapper(httpRequest, httpResponse,
+					getRequestName(httpRequest));
+		}
+		return new CounterServletResponseWrapper(httpResponse2);
 	}
 
 	protected HttpServletRequest createRequestWrapper(HttpServletRequest request,
@@ -313,7 +342,7 @@ public class MonitoringFilter implements Filter {
 		return getCompleteRequestName(request, false);
 	}
 
-	protected final String getMonitoringUrl(HttpServletRequest httpRequest) {
+	protected String getMonitoringUrl(HttpServletRequest httpRequest) {
 		if (monitoringUrl == null) {
 			monitoringUrl = httpRequest.getContextPath() + Parameters.getMonitoringPath();
 		}
@@ -331,16 +360,16 @@ public class MonitoringFilter implements Filter {
 		// donc l'adresse ip est celle de la première requête créant une session,
 		// et si l'adresse ip change ensuite c'est très étrange
 		// mais elle n'est pas mise à jour dans la session
-		if (session.getAttribute(SessionInformations.SESSION_COUNTRY_KEY) == null) {
+		if (session.getAttribute(SessionListener.SESSION_COUNTRY_KEY) == null) {
 			// langue préférée du navigateur, getLocale ne peut être null
 			final Locale locale = httpRequest.getLocale();
 			if (!locale.getCountry().isEmpty()) {
-				session.setAttribute(SessionInformations.SESSION_COUNTRY_KEY, locale.getCountry());
+				session.setAttribute(SessionListener.SESSION_COUNTRY_KEY, locale.getCountry());
 			} else {
-				session.setAttribute(SessionInformations.SESSION_COUNTRY_KEY, locale.getLanguage());
+				session.setAttribute(SessionListener.SESSION_COUNTRY_KEY, locale.getLanguage());
 			}
 		}
-		if (session.getAttribute(SessionInformations.SESSION_REMOTE_ADDR) == null) {
+		if (session.getAttribute(SessionListener.SESSION_REMOTE_ADDR) == null) {
 			// adresse ip
 			final String forwardedFor = httpRequest.getHeader("X-Forwarded-For");
 			final String remoteAddr;
@@ -349,18 +378,18 @@ public class MonitoringFilter implements Filter {
 			} else {
 				remoteAddr = httpRequest.getRemoteAddr() + " forwarded for " + forwardedFor;
 			}
-			session.setAttribute(SessionInformations.SESSION_REMOTE_ADDR, remoteAddr);
+			session.setAttribute(SessionListener.SESSION_REMOTE_ADDR, remoteAddr);
 		}
-		if (session.getAttribute(SessionInformations.SESSION_REMOTE_USER) == null) {
+		if (session.getAttribute(SessionListener.SESSION_REMOTE_USER) == null) {
 			// login utilisateur, peut être null
 			final String remoteUser = httpRequest.getRemoteUser();
 			if (remoteUser != null) {
-				session.setAttribute(SessionInformations.SESSION_REMOTE_USER, remoteUser);
+				session.setAttribute(SessionListener.SESSION_REMOTE_USER, remoteUser);
 			}
 		}
-		if (session.getAttribute(SessionInformations.SESSION_USER_AGENT) == null) {
+		if (session.getAttribute(SessionListener.SESSION_USER_AGENT) == null) {
 			final String userAgent = httpRequest.getHeader("User-Agent");
-			session.setAttribute(SessionInformations.SESSION_USER_AGENT, userAgent);
+			session.setAttribute(SessionListener.SESSION_USER_AGENT, userAgent);
 		}
 	}
 
@@ -495,5 +524,74 @@ public class MonitoringFilter implements Filter {
 
 	FilterContext getFilterContext() {
 		return filterContext;
+	}
+
+	/**
+	 * Asynchronously calls the optional collect server to register this application's node to be monitored.
+	 * @param applicationName Name of the application in the collect server:<br/>
+	 *     if it already exists the node will be added with the other nodes, if null name will be "contextPath_hostname".
+	 * @param collectServerUrl Url of the collect server,
+	 *     for example http://11.22.33.44:8080
+	 * @param applicationNodeUrl Url of this application node to be called by the collect server,
+	 *     for example http://55.66.77.88:8080/mywebapp
+	 */
+	public static void registerApplicationNodeInCollectServer(String applicationName,
+			URL collectServerUrl, URL applicationNodeUrl) {
+		if (collectServerUrl == null || applicationNodeUrl == null) {
+			throw new IllegalArgumentException(
+					"collectServerUrl and applicationNodeUrl must not be null");
+		}
+		final String appName;
+		if (applicationName == null) {
+			appName = Parameters.getCurrentApplication();
+		} else {
+			appName = applicationName;
+		}
+		final URL registerUrl;
+		try {
+			registerUrl = new URL(collectServerUrl.toExternalForm() + "?appName="
+					+ URLEncoder.encode(appName, "UTF-8") + "&appUrls="
+					// "UTF-8" as said in javadoc
+					+ URLEncoder.encode(applicationNodeUrl.toExternalForm(), "UTF-8")
+					+ "&action=registerNode");
+			unregisterApplicationNodeInCollectServerUrl = new URL(
+					registerUrl.toExternalForm().replace("registerNode", "unregisterNode"));
+		} catch (final IOException e) {
+			// can't happen if urls are ok
+			throw new IllegalArgumentException(e);
+		}
+
+		// this is an asynchronous call because if this method is called when the webapp is starting,
+		// the webapp can not respond to the collect server for the first collect of data
+		final Thread thread = new Thread("javamelody registerApplicationNodeInCollectServer") {
+			@Override
+			public void run() {
+				try {
+					Thread.sleep(10000);
+				} catch (final InterruptedException e) {
+					throw new IllegalStateException(e);
+				}
+				try {
+					new LabradorRetriever(registerUrl).post(null);
+					LOG.info("application node added to the collect server");
+				} catch (final IOException e) {
+					LOG.warn("Unable to register application's node in the collect server ( " + e
+							+ ')', e);
+				}
+			}
+		};
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	/**
+	 * Call the optional collect server to unregister this application's node.
+	 * @throws IOException e
+	 */
+	public static void unregisterApplicationNodeInCollectServer() throws IOException {
+		if (unregisterApplicationNodeInCollectServerUrl != null) {
+			new LabradorRetriever(unregisterApplicationNodeInCollectServerUrl).post(null);
+			LOG.info("application node removed from the collect server");
+		}
 	}
 }

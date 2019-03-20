@@ -40,6 +40,11 @@ import javax.naming.NamingException;
 import javax.servlet.ServletContext;
 import javax.sql.DataSource;
 
+import net.bull.javamelody.internal.common.LOG;
+import net.bull.javamelody.internal.common.Parameters;
+import net.bull.javamelody.internal.model.ConnectionInformations;
+import net.bull.javamelody.internal.model.Counter;
+
 /**
  * Cette classe est utile pour construire des proxy de {@link DataSource}s ou de {@link Connection}s jdbc.<br>
  * Et notamment elle rebinde dans l'annuaire JNDI la dataSource jdbc en la remplaçant
@@ -319,38 +324,38 @@ public final class JdbcWrapper {
 				&& !Parameters.isNoDatabase();
 	}
 
-	static int getUsedConnectionCount() {
+	public static int getUsedConnectionCount() {
 		return USED_CONNECTION_COUNT.get();
 	}
 
-	static int getActiveConnectionCount() {
+	public static int getActiveConnectionCount() {
 		return ACTIVE_CONNECTION_COUNT.get();
 	}
 
-	static long getTransactionCount() {
+	public static long getTransactionCount() {
 		return TRANSACTION_COUNT.get();
 	}
 
-	static int getActiveThreadCount() {
+	public static int getActiveThreadCount() {
 		return ACTIVE_THREAD_COUNT.get();
 	}
 
-	static int getRunningBuildCount() {
+	public static int getRunningBuildCount() {
 		return RUNNING_BUILD_COUNT.get();
 	}
 
-	static int getBuildQueueLength() {
+	public static int getBuildQueueLength() {
 		return BUILD_QUEUE_LENGTH.get();
 	}
 
-	static List<ConnectionInformations> getConnectionInformationsList() {
+	public static List<ConnectionInformations> getConnectionInformationsList() {
 		final List<ConnectionInformations> result = new ArrayList<ConnectionInformations>(
 				USED_CONNECTION_INFORMATIONS.values());
 		Collections.sort(result, new ConnectionInformationsComparator());
 		return Collections.unmodifiableList(result);
 	}
 
-	Counter getSqlCounter() {
+	public Counter getSqlCounter() {
 		return sqlCounter;
 	}
 
@@ -358,15 +363,15 @@ public final class JdbcWrapper {
 		return connectionInformationsEnabled;
 	}
 
-	static int getMaxConnectionCount() {
+	public static int getMaxConnectionCount() {
 		return JdbcWrapperHelper.getMaxConnectionCount();
 	}
 
-	static Map<String, Map<String, Object>> getBasicDataSourceProperties() {
+	public static Map<String, Map<String, Object>> getBasicDataSourceProperties() {
 		return JdbcWrapperHelper.getBasicDataSourceProperties();
 	}
 
-	static Map<String, DataSource> getJndiAndSpringDataSources() throws NamingException {
+	public static Map<String, DataSource> getJndiAndSpringDataSources() throws NamingException {
 		return JdbcWrapperHelper.getJndiAndSpringDataSources();
 	}
 
@@ -402,7 +407,7 @@ public final class JdbcWrapper {
 
 			// note perf: selon un paramètre current-sql(/requests)-disabled,
 			// on pourrait ici ne pas binder un nouveau contexte à chaque requête sql
-			sqlCounter.bindContext(requestName, requestName, null, -1);
+			sqlCounter.bindContext(requestName, requestName, null, null, -1, -1);
 
 			final Object result = method.invoke(statement, args);
 			systemError = false;
@@ -427,7 +432,7 @@ public final class JdbcWrapper {
 			// Rq : pas de temps cpu pour les requêtes sql car c'est 0 ou quasiment 0
 			ACTIVE_CONNECTION_COUNT.decrementAndGet();
 			final long duration = Math.max(System.currentTimeMillis() - start, 0);
-			sqlCounter.addRequest(requestName, duration, -1, systemError, -1);
+			sqlCounter.addRequest(requestName, duration, -1, -1, systemError, -1);
 		}
 	}
 
@@ -436,12 +441,11 @@ public final class JdbcWrapper {
 		// on cherche une datasource avec InitialContext pour afficher nom et version bdd + nom et version driver jdbc
 		// (le nom de la dataSource recherchée dans JNDI est du genre jdbc/Xxx qui est le nom standard d'une DataSource)
 		try {
-			final boolean rewrapDataSources = Boolean
-					.parseBoolean(Parameters.getParameter(Parameter.REWRAP_DATASOURCES));
-			if (rewrapDataSources) {
-				// on annule le rebinding éventuellement fait avant par SessionListener
-				// si rewrap-datasources est défini dans le filter
-				JdbcWrapperHelper.rebindInitialDataSources(servletContext);
+			final boolean rewrapDataSources = Parameter.REWRAP_DATASOURCES.getValueAsBoolean();
+			if (rewrapDataSources || Parameter.DATASOURCES.getValue() != null) {
+				// on annule le rebinding ou rewrapping éventuellement faits avant par SessionListener
+				// si datasources ou rewrap-datasources est défini dans le filter
+				stop();
 			}
 			final Map<String, DataSource> jndiDataSources = JdbcWrapperHelper.getJndiDataSources();
 			LOG.debug("datasources found in JNDI: " + jndiDataSources.keySet());
@@ -451,6 +455,7 @@ public final class JdbcWrapper {
 				try {
 					if (rewrapDataSources || isServerNeedsRewrap(jndiName)) {
 						rewrapDataSource(jndiName, dataSource);
+						JdbcWrapperHelper.registerRewrappedDataSource(jndiName, dataSource);
 					} else if (!isProxyAlready(dataSource)) {
 						// si dataSource est déjà un proxy, il ne faut pas faire un proxy d'un proxy ni un rebinding
 						final DataSource dataSourceProxy = createDataSourceProxy(jndiName,
@@ -613,16 +618,14 @@ public final class JdbcWrapper {
 			JdbcWrapperHelper.rebindInitialDataSources(servletContext);
 
 			// si jboss, glassfish ou weblogic avec datasource, on désencapsule aussi les objets wrappés
-			final Map<String, DataSource> jndiDataSources = JdbcWrapperHelper.getJndiDataSources();
-			final boolean rewrapDataSources = Boolean
-					.parseBoolean(Parameters.getParameter(Parameter.REWRAP_DATASOURCES));
-			for (final Map.Entry<String, DataSource> entry : jndiDataSources.entrySet()) {
+			final Map<String, DataSource> rewrappedDataSources = JdbcWrapperHelper
+					.getRewrappedDataSources();
+			for (final Map.Entry<String, DataSource> entry : rewrappedDataSources.entrySet()) {
 				final String jndiName = entry.getKey();
 				final DataSource dataSource = entry.getValue();
-				if (rewrapDataSources || isServerNeedsRewrap(jndiName)) {
-					unwrapDataSource(jndiName, dataSource);
-				}
+				unwrapDataSource(jndiName, dataSource);
 			}
+			rewrappedDataSources.clear();
 
 			JdbcWrapperHelper.clearProxyCache();
 
@@ -822,7 +825,7 @@ public final class JdbcWrapper {
 	private static boolean isMonitoringDisabled() {
 		// on doit réévaluer ici le paramètre, car au départ le servletContext
 		// n'est pas forcément défini si c'est un driver jdbc sans dataSource
-		return Boolean.parseBoolean(Parameters.getParameter(Parameter.DISABLED));
+		return Parameter.DISABLED.getValueAsBoolean();
 	}
 
 	Statement createStatementProxy(String query, Statement statement) {

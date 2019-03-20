@@ -36,9 +36,23 @@ public class JavaMelodyConfigurationProperties {
 	 */
 	public static final String PREFIX = "javamelody";
 
+	/**
+	 * If JavaMelody should be enabled within the application.
+	 */
 	private boolean enabled = true;
+	/**
+	 * Comma-separated list of data source names which should be excluded from monitoring.
+	 */
 	private String excludedDatasources;
-	private Map<String, String> initParameters = new HashMap<String, String>();
+	/**
+	 * If /monitoring should be enabled for reports in the management http port instead of on the application http port.
+	 */
+	private boolean managementEndpointMonitoringEnabled;
+	/**
+	 * Map of initialization parameters to be passed to the JavaMelody monitoring filter.
+	 * The available parameters are listed here: https://github.com/javamelody/javamelody/wiki/UserGuide#6-optional-parameters
+	 */
+	private Map<String, String> initParameters = new HashMap<>();
 
 	/**
 	 * Returns if JavaMelody should be enabled within the application.
@@ -68,6 +82,22 @@ public class JavaMelodyConfigurationProperties {
 	}
 
 	/**
+	 * Returns if /monitoring should be enabled for reports in the management http port instead of on the application http port.
+	 * @return true or false
+	 */
+	public boolean isManagementEndpointMonitoringEnabled() {
+		return managementEndpointMonitoringEnabled;
+	}
+
+	/**
+	 * Sets whether /monitoring should be enabled for reports in the management http port instead of on the application http port.
+	 * @param managementEndpointEnabled true or false
+	 */
+	public void setManagementEndpointMonitoringEnabled(boolean managementEndpointEnabled) {
+		this.managementEndpointMonitoringEnabled = managementEndpointEnabled;
+	}
+
+	/**
 	 * Sets a comma-separated list of data source names which should be excluded from monitoring.
 	 *
 	 * @param excludedDatasources Data source names to exclude from monitoring.
@@ -78,6 +108,7 @@ public class JavaMelodyConfigurationProperties {
 
 	/**
 	 * Returns a map of initialization parameters to be passed to the JavaMelody monitoring filter.
+	 * The available parameters are listed here: https://github.com/javamelody/javamelody/wiki/UserGuide#6-optional-parameters
 	 *
 	 * @return Initialization parameters for the JavaMelody monitoring filter.
 	 */
@@ -87,6 +118,7 @@ public class JavaMelodyConfigurationProperties {
 
 	/**
 	 * Sets a map of initialization parameters to be passed to the JavaMelody monitoring filter.
+	 * The available parameters are listed here: https://github.com/javamelody/javamelody/wiki/UserGuide#6-optional-parameters
 	 *
 	 * @param initParameters Initialization parameters for the JavaMelody monitoring filter.
 	 */

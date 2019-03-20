@@ -21,6 +21,10 @@ import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import net.bull.javamelody.internal.model.Counter;
+import net.bull.javamelody.internal.model.CounterRequest;
+import net.bull.javamelody.internal.model.CounterRequestAggregation;
+
 /**
  * MXBean which exposes {@link CounterRequestAggregation} data via JMX.
  * @see javax.management.MXBean
@@ -118,6 +122,10 @@ public interface CounterRequestMXBean {
 
 		public int getCpuTimeMean() {
 			return request.getCpuTimeMean();
+		}
+
+		public int getAllocatedKBytesMean() {
+			return request.getAllocatedKBytesMean();
 		}
 
 		public float getSystemErrorPercentage() {

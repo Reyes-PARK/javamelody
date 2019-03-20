@@ -26,6 +26,10 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.SwingConstants;
 
+import net.bull.javamelody.internal.model.Counter;
+import net.bull.javamelody.internal.model.CounterRequest;
+import net.bull.javamelody.internal.model.CounterRequestAggregation;
+import net.bull.javamelody.internal.model.RemoteCollector;
 import net.bull.javamelody.swing.table.MDefaultTableCellRenderer;
 import net.bull.javamelody.swing.table.MIntegerTableCellRenderer;
 import net.bull.javamelody.swing.table.MTable;
@@ -165,6 +169,9 @@ class StatisticsTablePanel extends MelodyPanel {
 			table.addColumn("cpuTimeMean", getString("Temps_cpu_moyen"));
 			table.setColumnCellRenderer("cpuTimeSum", new CpuPercentageTableCellRenderer());
 			table.setColumnCellRenderer("cpuTimeMean", meanCellRenderer);
+		}
+		if (counterRequestAggregation.isAllocatedKBytesDisplayed()) {
+			table.addColumn("allocatedKBytesMean", getString("Ko_alloues_moyens"));
 		}
 		if (!isErrorAndNotJobCounter()) {
 			table.addColumn("systemErrorPercentage", getString("erreur_systeme"));

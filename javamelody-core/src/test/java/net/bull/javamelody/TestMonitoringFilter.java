@@ -59,11 +59,23 @@ import javax.servlet.http.HttpSession;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import net.bull.javamelody.internal.common.HttpParameter;
+import net.bull.javamelody.internal.common.HttpPart;
+import net.bull.javamelody.internal.common.LOG;
+import net.bull.javamelody.internal.common.Parameters;
+import net.bull.javamelody.internal.model.Action;
+import net.bull.javamelody.internal.model.JavaInformations;
+import net.bull.javamelody.internal.model.Period;
+import net.bull.javamelody.internal.model.Range;
+import net.bull.javamelody.internal.model.TestDatabaseInformations;
+import net.bull.javamelody.internal.model.TransportFormat;
+import net.bull.javamelody.internal.web.CounterServletResponseWrapper;
+import net.bull.javamelody.internal.web.FilterServletOutputStream;
 import net.sf.ehcache.CacheManager;
 import net.sf.ehcache.Element;
 
@@ -72,7 +84,7 @@ import net.sf.ehcache.Element;
  * @author Emeric Vernat
  */
 // CHECKSTYLE:OFF
-public class TestMonitoringFilter {
+public class TestMonitoringFilter { // NOPMD
 	// CHECKSTYLE:ON
 	private static final String FILTER_NAME = "monitoring";
 	// identique à HttpCookieManager.PERIOD_COOKIE_NAME
@@ -312,11 +324,11 @@ public class TestMonitoringFilter {
 		final HttpServletRequest request = createNiceMock(HttpServletRequest.class);
 		final HttpSession session = createNiceMock(HttpSession.class);
 		expect(request.getSession(false)).andReturn(session);
-		expect(session.getAttribute(SessionInformations.SESSION_COUNTRY_KEY))
+		expect(session.getAttribute(SessionListener.SESSION_COUNTRY_KEY))
 				.andReturn(Locale.FRANCE.getCountry()).anyTimes();
-		expect(session.getAttribute(SessionInformations.SESSION_REMOTE_ADDR)).andReturn("somewhere")
+		expect(session.getAttribute(SessionListener.SESSION_REMOTE_ADDR)).andReturn("somewhere")
 				.anyTimes();
-		expect(session.getAttribute(SessionInformations.SESSION_REMOTE_USER)).andReturn("me")
+		expect(session.getAttribute(SessionListener.SESSION_REMOTE_USER)).andReturn("me")
 				.anyTimes();
 		replay(session);
 		doFilter(request);
@@ -385,7 +397,7 @@ public class TestMonitoringFilter {
 		final ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(
 				string.getBytes());
 		// CHECKSTYLE:OFF
-		final ServletInputStream inputStream = new ServletInputStream() {
+		return new ServletInputStream() {
 			// CHECKSTYLE:ON
 			@Override
 			public int read() throws IOException {
@@ -407,7 +419,6 @@ public class TestMonitoringFilter {
 				// nothing
 			}
 		};
-		return inputStream;
 	}
 
 	private void doFilter(HttpServletRequest request) throws ServletException, IOException {
@@ -662,19 +673,24 @@ public class TestMonitoringFilter {
 		monitoring(parameters);
 		parameters.put(HttpParameter.PART, HttpPart.MBEANS.getName());
 		monitoring(parameters);
-		final ApplicationContext context = new ClassPathXmlApplicationContext(
+		final ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(
 				new String[] { "net/bull/javamelody/monitoring-spring.xml", });
-		context.getBeanDefinitionNames();
-		parameters.put(HttpParameter.PART, HttpPart.SPRING_BEANS.getName());
-		monitoring(parameters);
-		setProperty(Parameter.SAMPLING_SECONDS, "60");
-		setUp();
-		parameters.put(HttpParameter.PART, HttpPart.HOTSPOTS.getName());
-		monitoring(parameters);
-		parameters.remove(HttpParameter.PART);
-		parameters.put(HttpParameter.JMX_VALUE, "java.lang:type=OperatingSystem.ProcessCpuTime");
-		monitoring(parameters);
-		parameters.remove(HttpParameter.JMX_VALUE);
+		try {
+			context.getBeanDefinitionNames();
+			parameters.put(HttpParameter.PART, HttpPart.SPRING_BEANS.getName());
+			monitoring(parameters);
+			setProperty(Parameter.SAMPLING_SECONDS, "60");
+			setUp();
+			parameters.put(HttpParameter.PART, HttpPart.HOTSPOTS.getName());
+			monitoring(parameters);
+			parameters.remove(HttpParameter.PART);
+			parameters.put(HttpParameter.JMX_VALUE,
+					"java.lang:type=OperatingSystem.ProcessCpuTime");
+			monitoring(parameters);
+			parameters.remove(HttpParameter.JMX_VALUE);
+		} finally {
+			context.close();
+		}
 	}
 
 	/**

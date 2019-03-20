@@ -37,6 +37,8 @@ import javax.swing.JTable;
 import javax.swing.SwingConstants;
 import javax.swing.table.TableColumn;
 
+import net.bull.javamelody.internal.model.MavenArtifact;
+import net.bull.javamelody.internal.model.RemoteCollector;
 import net.bull.javamelody.swing.MButton;
 import net.bull.javamelody.swing.Utilities;
 import net.bull.javamelody.swing.table.MDefaultTableCellRenderer;
@@ -56,10 +58,6 @@ class DependenciesPanel extends MelodyPanel {
 
 	class NameTableCellRenderer extends MDefaultTableCellRenderer {
 		private static final long serialVersionUID = 1L;
-
-		NameTableCellRenderer() {
-			super();
-		}
 
 		@Override
 		public Component getTableCellRendererComponent(JTable jtable, Object value,
@@ -84,10 +82,6 @@ class DependenciesPanel extends MelodyPanel {
 	class MavenIdTableCellRenderer extends MDefaultTableCellRenderer {
 		private static final long serialVersionUID = 1L;
 
-		MavenIdTableCellRenderer() {
-			super();
-		}
-
 		@Override
 		public Component getTableCellRendererComponent(JTable jtable, Object value,
 				boolean isSelected, boolean hasFocus, int row, int column) {
@@ -107,10 +101,6 @@ class DependenciesPanel extends MelodyPanel {
 
 	class LicenseTableCellRenderer extends MDefaultTableCellRenderer {
 		private static final long serialVersionUID = 1L;
-
-		LicenseTableCellRenderer() {
-			super();
-		}
 
 		@Override
 		public Component getTableCellRendererComponent(JTable jtable, Object value,

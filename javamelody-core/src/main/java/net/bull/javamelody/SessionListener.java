@@ -35,6 +35,11 @@ import javax.servlet.http.HttpSessionActivationListener;
 import javax.servlet.http.HttpSessionEvent;
 import javax.servlet.http.HttpSessionListener;
 
+import net.bull.javamelody.internal.common.HttpParameter;
+import net.bull.javamelody.internal.common.LOG;
+import net.bull.javamelody.internal.common.Parameters;
+import net.bull.javamelody.internal.model.SessionInformations;
+
 /**
  * Listener de session http ({@link HttpSessionListener}) pour le monitoring.
  * C'est la classe de ce listener qui doit être déclarée dans le fichier web.xml de la webapp.
@@ -44,8 +49,15 @@ import javax.servlet.http.HttpSessionListener;
  */
 public class SessionListener implements HttpSessionListener, HttpSessionActivationListener,
 		ServletContextListener, Serializable {
-	static final String CSRF_TOKEN_SESSION_NAME = "javamelody." + HttpParameter.TOKEN.getName();
+	public static final String CSRF_TOKEN_SESSION_NAME = "javamelody."
+			+ HttpParameter.TOKEN.getName();
+	public static final String SESSION_COUNTRY_KEY = "javamelody.country";
+	public static final String SESSION_REMOTE_ADDR = "javamelody.remoteAddr";
+	public static final String SESSION_REMOTE_USER = "javamelody.remoteUser";
+	public static final String SESSION_USER_AGENT = "javamelody.userAgent";
+
 	private static final String SESSION_ACTIVATION_KEY = "javamelody.sessionActivation";
+
 	private static final long serialVersionUID = -1624944319058843901L;
 	// au lieu d'utiliser un int avec des synchronized partout, on utilise un AtomicInteger
 	private static final AtomicInteger SESSION_COUNT = new AtomicInteger();
@@ -111,7 +123,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		instanceCreated = newInstanceCreated;
 	}
 
-	static int getSessionCount() {
+	public static int getSessionCount() {
 		if (!instanceCreated) {
 			return -1;
 		}
@@ -121,7 +133,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		return SESSION_COUNT.get();
 	}
 
-	static long getSessionAgeSum() {
+	public static long getSessionAgeSum() {
 		if (!instanceCreated) {
 			return -1;
 		}
@@ -145,7 +157,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 	}
 
 	// since 1.49
-	static void invalidateAllSessionsExceptCurrentSession(HttpSession currentSession) {
+	public static void invalidateAllSessionsExceptCurrentSession(HttpSession currentSession) {
 		for (final HttpSession session : SESSION_MAP_BY_ID.values()) {
 			try {
 				if (currentSession != null && currentSession.getId().equals(session.getId())) {
@@ -161,7 +173,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		}
 	}
 
-	static void invalidateSession(String sessionId) {
+	public static void invalidateSession(String sessionId) {
 		final HttpSession session = getSessionById(sessionId);
 		if (session != null) {
 			// dans Jenkins notamment, une session invalidée peut rester un peu dans cette map
@@ -211,7 +223,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		}
 	}
 
-	static List<SessionInformations> getAllSessionsInformations() {
+	public static List<SessionInformations> getAllSessionsInformations() {
 		final Collection<HttpSession> sessions = SESSION_MAP_BY_ID.values();
 		final List<SessionInformations> sessionsInformations = new ArrayList<SessionInformations>(
 				sessions.size());
@@ -227,7 +239,8 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		return Collections.unmodifiableList(sessionsInformations);
 	}
 
-	static List<SessionInformations> sortSessions(List<SessionInformations> sessionsInformations) {
+	public static List<SessionInformations> sortSessions(
+			List<SessionInformations> sessionsInformations) {
 		if (sessionsInformations.size() > 1) {
 			Collections.sort(sessionsInformations,
 					Collections.reverseOrder(new SessionInformationsComparator()));
@@ -235,7 +248,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		return sessionsInformations;
 	}
 
-	static SessionInformations getSessionInformationsBySessionId(String sessionId) {
+	public static SessionInformations getSessionInformationsBySessionId(String sessionId) {
 		final HttpSession session = getSessionById(sessionId);
 		if (session == null) {
 			return null;
@@ -253,7 +266,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 	 * Définit la session http pour le thread courant.
 	 * @param session HttpSession
 	 */
-	static void bindSession(HttpSession session) {
+	public static void bindSession(HttpSession session) {
 		if (session != null) {
 			SESSION_CONTEXT.set(session);
 		}
@@ -263,14 +276,14 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 	 * Retourne la session pour le thread courant ou null.
 	 * @return HttpSession
 	 */
-	static HttpSession getCurrentSession() {
+	public static HttpSession getCurrentSession() {
 		return SESSION_CONTEXT.get();
 	}
 
 	/**
 	 * Enlève le lien entre la session et le thread courant.
 	 */
-	static void unbindSession() {
+	public static void unbindSession() {
 		SESSION_CONTEXT.remove();
 	}
 
@@ -313,9 +326,17 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 	/** {@inheritDoc} */
 	@Override
 	public void contextDestroyed(ServletContextEvent event) {
+		if (!instanceEnabled) {
+			return;
+		}
 		// nettoyage avant le retrait de la webapp au cas où celui-ci ne suffise pas
 		SESSION_MAP_BY_ID.clear();
 		SESSION_COUNT.set(0);
+
+		// issue 665: in WildFly 10.1.0, the MonitoringFilter may never be initialized neither destroyed.
+		// For this case, it is needed to stop here the JdbcWrapper initialized in contextInitialized
+		JdbcWrapper.SINGLETON.stop();
+
 		LOG.debug("JavaMelody listener destroy done");
 	}
 
@@ -335,8 +356,13 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		// Since tomcat 6.0.21, because of https://issues.apache.org/bugzilla/show_bug.cgi?id=45255
 		// when tomcat authentication is used, sessionCreated is called twice for 1 session
 		// and each time with different ids, then sessionDestroyed is called once.
-		// So we do not count the 2nd sessionCreated event and we remove the id of the first event
-		if (session.getAttribute(SESSION_ACTIVATION_KEY) == this) {
+		// So we do not count the 2nd sessionCreated event and we remove the id of the first event.
+
+		// And (issue #795), in Tomcat's cluster after one instance restart
+		// sessions are synced with sessionDidActivate+sessionCreated
+		// so do not increment count for sessionCreated when session.getAttribute(SESSION_ACTIVATION_KEY) != null
+		// (but not == this because of deserialization)
+		if (session.getAttribute(SESSION_ACTIVATION_KEY) != null) {
 			// si la map des sessions selon leurs id contient une session dont la clé
 			// n'est plus égale à son id courant, alors on l'enlève de la map
 			// (et elle sera remise dans la map avec son nouvel id ci-dessous)

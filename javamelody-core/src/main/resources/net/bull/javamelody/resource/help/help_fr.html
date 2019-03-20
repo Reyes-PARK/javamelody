@@ -57,6 +57,8 @@ par l'intermédiaire des liens au-dessus de la synthèse :
  <img width='16' height='16' src='?resource=calendar.png' alt='year'/> l'année ou
   <img width='16' height='16' src='?resource=calendar.png' alt='custom'/> une période personnalisée.
 Dans chaque courbe sont suivies et indiquées en chiffres la valeur moyenne en vert et le maximum en bleu.
+Et dans les courbes zoomées est indiquée en violet la ligne du <a href='https://fr.wikipedia.org/wiki/95e_centile'>95ème percentile</a>,
+qui représente ce que serait le maximum sur la période si 5% des valeurs les plus grandes (pics) étaient exclues.
 Les unités dans les courbes sont choisies automatiquement selon les valeurs : "m" pour millièmes (1 / 1000), "k" pour kilo/milliers,
 "M" pour méga/millions, "G" pour giga/milliards et "u" pour micro (1 / 1000000).
 Les courbes sont persistées : un redémarrage du serveur d'application n'a pas d'influence sur elles hormis un trou dans les mesures.<br/>
@@ -242,6 +244,7 @@ cette courbe peut être agrandie en cliquant sur le contenu de la requête</li>
 s'il est élevé, les temps sont très variés, s'il est faible les temps sont rapprochés entre eux</li>
 <li>le pourcentage de temps cpu cumulé (temps cpu moyen * nb de hits) par rapport aux autres requêtes</li>
 <li>le temps cpu moyen en millisecondes</li>
+<li>le nombre moyen de Ko alloués, c'est-à-dire la mémoire utilisée par requête et qui devra être nettoyée par le ramasse-miettes par la suite</li>
 <li>le pourcentage d'erreurs systèmes</li>
 </ul>
 et si il s'agit des statistiques http, ejb, spring, guice, interfaces, actions jsf, actions struts ou jsp :<ul>

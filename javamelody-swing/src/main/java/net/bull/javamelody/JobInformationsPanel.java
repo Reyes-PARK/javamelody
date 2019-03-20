@@ -38,6 +38,13 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.table.TableColumn;
 
+import net.bull.javamelody.internal.common.I18N;
+import net.bull.javamelody.internal.common.Parameters;
+import net.bull.javamelody.internal.model.Action;
+import net.bull.javamelody.internal.model.Counter;
+import net.bull.javamelody.internal.model.CounterRequest;
+import net.bull.javamelody.internal.model.JobInformations;
+import net.bull.javamelody.internal.model.RemoteCollector;
 import net.bull.javamelody.swing.MButton;
 import net.bull.javamelody.swing.MHyperLink;
 import net.bull.javamelody.swing.Utilities;
@@ -314,7 +321,7 @@ class JobInformationsPanel extends MelodyPanel {
 		final String jobFullName = jobInformations.getGroup() + '.' + jobInformations.getName();
 		// rq: la méthode getCounterRequestByName prend en compte l'éventuelle utilisation du paramètre
 		// job-transform-pattern qui peut faire que jobFullName != counterRequest.getName()
-		final CounterRequest result = jobCounter.getCounterRequestByName(jobFullName);
+		final CounterRequest result = jobCounter.getCounterRequestByName(jobFullName, true);
 		// getCounterRequestByName ne peut pas retourner null actuellement
 		assert result != null;
 		return result;

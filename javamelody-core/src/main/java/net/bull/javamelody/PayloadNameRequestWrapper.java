@@ -35,6 +35,8 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
+import net.bull.javamelody.internal.common.LOG;
+
 //20091201 dhartford GWTRequestWrapper
 //20100519 dhartford adjustments for UTF-8, however did not have an impact so removed.
 //20100520 dhartford adjustments for reader/inputstream.
@@ -233,6 +235,8 @@ public class PayloadNameRequestWrapper extends HttpServletRequestWrapper {
 		try {
 			// newInstance() et pas newFactory() pour java 1.5 (issue 367)
 			final XMLInputFactory factory = XMLInputFactory.newInstance();
+			factory.setProperty(XMLInputFactory.SUPPORT_DTD, false); // disable DTDs entirely for that factory
+			factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false); // disable external entities
 			final XMLStreamReader xmlReader;
 			if (charEncoding != null) {
 				xmlReader = factory.createXMLStreamReader(stream, charEncoding);

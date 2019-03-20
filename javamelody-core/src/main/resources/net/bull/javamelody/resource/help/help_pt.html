@@ -54,6 +54,8 @@ Cada gráfico acompanha a evolução de um valor medido no curto ou longo prazo,
  <img width='16' height='16' src='?resource=calendar.png' alt='personalizado'/> por um período escolhido.
 Em cada gráfico, o valor médio é exibido em verde e o valor máximo,
 em azul, com números abaixo do mesmo.
+And in the zoomed charts the <a href='https://en.wikipedia.org/wiki/Burstable_billing'>95th percentile</a> line is displayed in magenta.
+It shows what would be the maximum on the period if 5% of the highest values (short peaks) were excluded.
 The units in the charts are chosen based on the values: "m" is for milli (1 / 1000), "k" is for kilo/thousands,
 "M" is for mega/millions, "G" is for giga/billions and "u" is for micro (1 / 1000000).
 Os gráficos são persistidos: um reinício do servidor de aplicação não tem influência sobre eles, exceto por um intervalo nas medidas.<br/>
@@ -204,7 +206,7 @@ Este gráfico pode ser ampliado, clicando sobre o conteúdo da requisição </li
 <li>o desvio padrão entre os tempos de execução: se ele é alto, os tempos de execução são variados, e se ele é baixo, os tempos de execução são próximos uns dos outros</li>
 <li>o percentual acumulado de tempo de CPU (tempo médio CPU * número de acessos) comparado com outras requisições.</li>
 <li>o tempo médio de CPU em milisegundos</li>
-
+<li>o número médio de Kb alocado, que é a memória usada pelo pedido e que terá que ser limpo pelo GC mais tarde</li>
 <li>o percentual de erros de sistema</li>
 </ul>
 e se é um HTTP, EJB, Spring, Guice interfaces, ações jsf, ações struts ou estatística JSP:<ul>
