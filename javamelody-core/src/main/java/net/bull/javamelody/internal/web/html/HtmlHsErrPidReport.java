@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -76,7 +76,7 @@ public class HtmlHsErrPidReport extends HtmlAbstractReport {
 
 	void writeLinks() throws IOException {
 		writeln("<div class='noPrint'>");
-		writeln("<a href='javascript:history.back()'><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
+		writeln("<a class='back' href=''><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
 		writeln("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 		writeln("<a href='?part=crashes'><img src='?resource=action_refresh.png' alt='#Actualiser#'/> #Actualiser#</a>");
 		writeln("</div>");

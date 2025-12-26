@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -60,7 +60,7 @@ class StatisticsTablePanel extends MelodyPanel {
 
 		@Override
 		public void setValue(final Object value) {
-			super.setValue((Integer) value / 1024);
+			super.setValue((Long) value / 1024);
 		}
 	}
 

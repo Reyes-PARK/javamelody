@@ -18,18 +18,18 @@ package net.bull.javamelody;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.persistence.EntityManagerFactory;
-import javax.persistence.spi.LoadState;
-import javax.persistence.spi.PersistenceProvider;
-import javax.persistence.spi.PersistenceProviderResolverHolder;
-import javax.persistence.spi.PersistenceUnitInfo;
-import javax.persistence.spi.ProviderUtil;
-
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.spi.LoadState;
+import jakarta.persistence.spi.PersistenceProvider;
+import jakarta.persistence.spi.PersistenceProviderResolver;
+import jakarta.persistence.spi.PersistenceProviderResolverHolder;
+import jakarta.persistence.spi.PersistenceUnitInfo;
+import jakarta.persistence.spi.ProviderUtil;
 import net.bull.javamelody.internal.common.LOG;
 import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.model.Counter;
@@ -42,6 +42,12 @@ public class JpaPersistence implements PersistenceProvider {
 	private static final Counter JPA_COUNTER = MonitoringProxy.getJpaCounter();
 	private static final boolean COUNTER_HIDDEN = Parameters.isCounterHidden(JPA_COUNTER.getName());
 
+	/**
+	 * The name of the {@link jakarta.persistence.spi.PersistenceProvider} implementor
+	 * <p/>
+	 * See JPA 2 sections 9.4.3 and 8.2.1.4
+	 */
+	private static final String JPA_PERSISTENCE_PROVIDER = "javax.persistence.provider";
 	private static final String OWN_PACKAGE = JpaPersistence.class.getName().substring(0,
 			JpaPersistence.class.getName().lastIndexOf('.'));
 	private static final String DELEGATE_PROVIDER_KEY = OWN_PACKAGE + ".jpa.provider";
@@ -78,6 +84,56 @@ public class JpaPersistence implements PersistenceProvider {
 
 	private volatile PersistenceProvider delegate; // NOPMD
 
+	private static class JavaMelodyPersistenceProviderResolver
+			implements PersistenceProviderResolver {
+		private final PersistenceProviderResolver delegate;
+
+		JavaMelodyPersistenceProviderResolver(PersistenceProviderResolver delegate) {
+			super();
+			this.delegate = delegate;
+		}
+
+		@Override
+		public List<PersistenceProvider> getPersistenceProviders() {
+			// avant de retourner la liste des persistence providers
+			// on met notre JpaPersistence en premier pour qu'il soit toujours choisi
+			// et qu'il délègue au persistence provider final
+			final List<PersistenceProvider> providers = delegate.getPersistenceProviders();
+			final List<PersistenceProvider> result = new ArrayList<>();
+			for (final PersistenceProvider provider : providers) {
+				if (provider instanceof JpaPersistence) {
+					result.add(0, provider);
+				} else {
+					result.add(provider);
+				}
+			}
+			return result;
+		}
+
+		@Override
+		public void clearCachedProviders() {
+			delegate.clearCachedProviders();
+		}
+	}
+
+	/**
+	 * Active le monitoring JPA par défaut,
+	 * même si <provider>net.bull.javamelody.JpaPersistence</provider> n'est pas dans META-INF/persistence.xml
+	 */
+	public static void initPersistenceProviderResolver() {
+		try {
+			PersistenceProviderResolver resolver = PersistenceProviderResolverHolder
+					.getPersistenceProviderResolver();
+			if (!(resolver instanceof JavaMelodyPersistenceProviderResolver)) {
+				resolver = new JavaMelodyPersistenceProviderResolver(resolver);
+				PersistenceProviderResolverHolder.setPersistenceProviderResolver(resolver);
+				LOG.debug("JPA persistence provider resolver initialized");
+			}
+		} catch (final Throwable t) { // NOPMD
+			LOG.info("initialization of jpa persistence provider resolver failed, skipping");
+		}
+	}
+
 	// cette classe est instanciée dès le démarrage (WildFly notamment),
 	// il ne faut donc pas appeler initJpaCounter() dans le constructeur
 
@@ -92,26 +148,27 @@ public class JpaPersistence implements PersistenceProvider {
 	}
 
 	/** {@inheritDoc} */
-	@SuppressWarnings("rawtypes")
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	@Override
 	public EntityManagerFactory createEntityManagerFactory(final String unit, final Map map) {
 		initJpaCounter();
 		final PersistenceProvider persistenceProvider = findDelegate(map);
 		final ClassLoader tccl = tccl();
 
-		final ClassLoader hack = AccessController.doPrivileged(new PrivilegedAction<ClassLoader>() { // pour findbugs
-			/** {@inheritDoc} */
-			@Override
-			public ClassLoader run() {
-				return new JpaOverridePersistenceXmlClassLoader(tccl,
-						persistenceProvider.getClass().getName());
-			}
-		});
+		final ClassLoader hack = new JpaOverridePersistenceXmlClassLoader(tccl,
+				persistenceProvider.getClass().getName());
 
 		Thread.currentThread().setContextClassLoader(hack);
 		try {
+			final Map overridenMap = new HashMap();
+			if (map != null) {
+				overridenMap.putAll(map);
+			}
+			// #869 No Persistence provider for EntityManager, with Hibernate 5.4 & JPA
+			// (when JpaOverridePersistenceXmlClassLoader is not enough)
+			overridenMap.put(JPA_PERSISTENCE_PROVIDER, persistenceProvider.getClass().getName());
 			final EntityManagerFactory entityManagerFactory = persistenceProvider
-					.createEntityManagerFactory(unit, map);
+					.createEntityManagerFactory(unit, overridenMap);
 			if (entityManagerFactory == null) {
 				return null;
 			}
@@ -122,7 +179,7 @@ public class JpaPersistence implements PersistenceProvider {
 	}
 
 	/** {@inheritDoc} */
-	@SuppressWarnings("rawtypes")
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	@Override
 	public EntityManagerFactory createContainerEntityManagerFactory(final PersistenceUnitInfo info,
 			final Map map) {
@@ -132,8 +189,15 @@ public class JpaPersistence implements PersistenceProvider {
 		// pour retourner le PersistenceProvider délégué et pas nous même
 		final PersistenceUnitInfo proxiedInfo = createPersistentUnitInfoProxy(info,
 				persistenceProvider);
+		final Map overridenMap = new HashMap();
+		if (map != null) {
+			overridenMap.putAll(map);
+		}
+		// #869 No Persistence provider for EntityManager, with Hibernate 5.4 & JPA
+		// (when JpaOverridePersistenceXmlClassLoader is not enough)
+		overridenMap.put(JPA_PERSISTENCE_PROVIDER, persistenceProvider.getClass().getName());
 		final EntityManagerFactory entityManagerFactory = persistenceProvider
-				.createContainerEntityManagerFactory(proxiedInfo, map);
+				.createContainerEntityManagerFactory(proxiedInfo, overridenMap);
 		if (entityManagerFactory == null) {
 			return null;
 		}
@@ -228,7 +292,8 @@ public class JpaPersistence implements PersistenceProvider {
 	}
 
 	private static PersistenceProvider newPersistence(final String name) throws Exception { // NOPMD
-		return PersistenceProvider.class.cast(tccl().loadClass(name).newInstance());
+		return PersistenceProvider.class
+				.cast(tccl().loadClass(name).getDeclaredConstructor().newInstance());
 	}
 
 	private static class ProviderAwareHandler implements InvocationHandler {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -28,7 +28,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -39,11 +38,11 @@ import javax.naming.Binding;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
-import javax.servlet.ServletContext;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletContext;
 import net.bull.javamelody.SessionTestImpl;
 import net.bull.javamelody.Utils;
 import net.bull.javamelody.internal.common.Parameters;
@@ -82,25 +81,19 @@ public class TestPdfOtherReport {
 	@Test
 	public void testWriteHeapHistogram() throws IOException {
 		final ByteArrayOutputStream output = new ByteArrayOutputStream();
-		final InputStream input = getClass().getResourceAsStream("/heaphisto.txt");
-		try {
+		try (InputStream input = getClass().getResourceAsStream("/heaphisto.txt")) {
 			final PdfOtherReport pdfOtherReport = new PdfOtherReport(TEST_APP, output);
 			final HeapHistogram heapHistogram = new HeapHistogram(input, false);
 			pdfOtherReport.writeHeapHistogram(heapHistogram);
 			pdfOtherReport.close();
-		} finally {
-			input.close();
 		}
 		assertNotEmptyAndClear(output);
 
-		final InputStream input2 = getClass().getResourceAsStream("/heaphisto_jrockit.txt");
-		try {
+		try (InputStream input2 = getClass().getResourceAsStream("/heaphisto_jrockit.txt")) {
 			final PdfOtherReport pdfOtherReport = new PdfOtherReport(TEST_APP, output);
 			final HeapHistogram heapHistogram = new HeapHistogram(input2, true);
 			pdfOtherReport.writeHeapHistogram(heapHistogram);
 			pdfOtherReport.close();
-		} finally {
-			input2.close();
 		}
 		assertNotEmptyAndClear(output);
 	}
@@ -111,7 +104,7 @@ public class TestPdfOtherReport {
 	public void testWriteSessionInformations() throws IOException {
 		final ByteArrayOutputStream output = new ByteArrayOutputStream();
 
-		final List<SessionInformations> sessions = new ArrayList<SessionInformations>();
+		final List<SessionInformations> sessions = new ArrayList<>();
 		sessions.add(new SessionInformations(new SessionTestImpl(true), false));
 		sessions.add(new SessionInformations(new SessionTestImpl(false), false));
 		final SessionTestImpl serializableButNotSession = new SessionTestImpl(true);
@@ -119,7 +112,7 @@ public class TestPdfOtherReport {
 				Collections.singleton(new Object()));
 		sessions.add(new SessionInformations(serializableButNotSession, false));
 		PdfOtherReport pdfOtherReport = new PdfOtherReport(TEST_APP, output);
-		pdfOtherReport.writeSessionInformations(Collections.<SessionInformations> emptyList());
+		pdfOtherReport.writeSessionInformations(Collections.emptyList());
 		assertNotEmptyAndClear(output);
 
 		pdfOtherReport = new PdfOtherReport(TEST_APP, output);
@@ -176,8 +169,7 @@ public class TestPdfOtherReport {
 	@Test
 	public void testWriteHotspots() throws IOException {
 		final ByteArrayOutputStream output = new ByteArrayOutputStream();
-		final SamplingProfiler samplingProfiler = new SamplingProfiler(new ArrayList<String>(),
-				null);
+		final SamplingProfiler samplingProfiler = new SamplingProfiler(new ArrayList<>(), null);
 		final List<SampledMethod> emptyHotspots = samplingProfiler.getHotspots(100);
 		samplingProfiler.update();
 		final List<SampledMethod> hotspots = samplingProfiler.getHotspots(100);
@@ -228,7 +220,6 @@ public class TestPdfOtherReport {
 	public void testWriteJndi() throws NamingException, IOException {
 		final String contextPath = "comp/env/";
 		final Context context = createNiceMock(Context.class);
-		@SuppressWarnings("unchecked")
 		final NamingEnumeration<Binding> enumeration = createNiceMock(NamingEnumeration.class);
 		expect(context.listBindings("java:" + contextPath)).andReturn(enumeration).anyTimes();
 		expect(enumeration.hasMore()).andReturn(true).times(6);
@@ -299,7 +290,7 @@ public class TestPdfOtherReport {
 		final ByteArrayOutputStream output = new ByteArrayOutputStream();
 		final PdfOtherReport pdfOtherReport = new PdfOtherReport(TEST_APP, output);
 		final Counter counter = new Counter("services", null);
-		final Collector collector = new Collector(TEST_APP, Arrays.asList(counter));
+		final Collector collector = new Collector(TEST_APP, List.of(counter));
 		pdfOtherReport.writeCounterSummaryPerClass(collector, counter, null,
 				Period.TOUT.getRange());
 		assertNotEmptyAndClear(output);
@@ -312,7 +303,7 @@ public class TestPdfOtherReport {
 		final ByteArrayOutputStream output = new ByteArrayOutputStream();
 		final PdfOtherReport pdfOtherReport = new PdfOtherReport(TEST_APP, output);
 		final Counter counter = new Counter("services", null);
-		final Collector collector = new Collector(TEST_APP, Arrays.asList(counter));
+		final Collector collector = new Collector(TEST_APP, List.of(counter));
 		final long timeOfSnapshot = System.currentTimeMillis();
 		final List<CounterRequestContext> requests = Collections.emptyList();
 		final JavaInformations javaInformations = new JavaInformations(null, true);
@@ -330,19 +321,19 @@ public class TestPdfOtherReport {
 		final Counter sqlCounter = new Counter("sql", "db.png");
 		final Counter httpCounter = new Counter("http", "db.png", sqlCounter);
 		final Counter errorCounter = new Counter("error", "db.png");
-		final List<Counter> counters = new ArrayList<Counter>();
+		final List<Counter> counters = new ArrayList<>();
 		counters.add(httpCounter);
 		counters.add(sqlCounter);
 		counters.add(errorCounter);
 		final Collector collector = new Collector("test", counters);
 		final JavaInformations javaInformations = new JavaInformations(null, true);
 
-		httpCounter.bindContext("test 1", "complete test 1", null, null, -1, -1);
-		sqlCounter.bindContext("sql1", "sql 1", null, null, -1, -1);
+		httpCounter.bindContext("test 1", "complete test 1", null, -1, -1);
+		sqlCounter.bindContext("sql1", "sql 1", null, -1, -1);
 		sqlCounter.addRequest("sql1", 100, 100, 100, false, -1);
 		httpCounter.addRequest("test 1", 0, 0, 0, false, 1000);
 		errorCounter.addRequestForSystemError("test error", 0, 0, 0, " a stack-trace");
-		collector.collectWithoutErrors(Arrays.asList(javaInformations));
+		collector.collectWithoutErrors(List.of(javaInformations));
 		final String requestId = httpCounter.getRequests().get(0).getId();
 		final String requestId2 = errorCounter.getRequests().get(0).getId();
 

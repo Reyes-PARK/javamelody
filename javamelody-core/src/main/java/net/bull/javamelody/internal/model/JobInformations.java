@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -141,17 +141,16 @@ public class JobInformations implements Serializable {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
 	static List<JobInformations> buildJobInformationsList() {
 		if (!QUARTZ_AVAILABLE) {
 			return Collections.emptyList();
 		}
-		final List<JobInformations> result = new ArrayList<JobInformations>();
+		final List<JobInformations> result = new ArrayList<>();
 		try {
 			final QuartzAdapter quartzAdapter = QuartzAdapter.getSingleton();
 			for (final Scheduler scheduler : getAllSchedulers()) {
-				final Map<String, JobExecutionContext> currentlyExecutingJobsByFullName = new LinkedHashMap<String, JobExecutionContext>();
-				for (final JobExecutionContext currentlyExecutingJob : (List<JobExecutionContext>) scheduler
+				final Map<String, JobExecutionContext> currentlyExecutingJobsByFullName = new LinkedHashMap<>();
+				for (final JobExecutionContext currentlyExecutingJob : scheduler
 						.getCurrentlyExecutingJobs()) {
 					final JobDetail jobDetail = quartzAdapter
 							.getContextJobDetail(currentlyExecutingJob);
@@ -179,9 +178,8 @@ public class JobInformations implements Serializable {
 		return result;
 	}
 
-	@SuppressWarnings("unchecked")
 	public static List<Scheduler> getAllSchedulers() {
-		return new ArrayList<Scheduler>(SchedulerRepository.getInstance().lookupAll());
+		return new ArrayList<>(SchedulerRepository.getInstance().lookupAll());
 	}
 
 	public String getGlobalJobId() {

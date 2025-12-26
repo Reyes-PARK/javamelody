@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -40,6 +40,7 @@ import net.bull.javamelody.internal.model.CacheInformations;
 import net.bull.javamelody.internal.model.Collector;
 import net.bull.javamelody.internal.model.Counter;
 import net.bull.javamelody.internal.model.CounterRequestContext;
+import net.bull.javamelody.internal.model.JCacheInformations;
 import net.bull.javamelody.internal.model.JRobin;
 import net.bull.javamelody.internal.model.JavaInformations;
 import net.bull.javamelody.internal.model.JobInformations;
@@ -113,7 +114,7 @@ public class PdfCoreReport extends PdfAbstractReport {
 		final List<Counter> counters = collector.getRangeCountersToBeDisplayed(counterRange);
 		final List<PdfCounterReport> pdfCounterReports = writeCounters(counters);
 
-		final List<PdfCounterRequestContextReport> pdfCounterRequestContextReports = new ArrayList<PdfCounterRequestContextReport>();
+		final List<PdfCounterRequestContextReport> pdfCounterRequestContextReports = new ArrayList<>();
 		if (!collectorServer) {
 			addParagraph(getString("Requetes_en_cours"), "hourglass.png");
 			// si on n'est pas sur le serveur de collecte il n'y a qu'un javaInformations
@@ -138,10 +139,11 @@ public class PdfCoreReport extends PdfAbstractReport {
 			pdfJobCounterReport = writeCounter(rangeJobCounter);
 		}
 
-		if (isCacheEnabled()) {
+		if (isCacheEnabled() || isJCacheEnabled()) {
 			addToDocument(new Phrase("\n", normalFont));
 			addParagraph(getString("Caches"), "caches.png");
 			writeCaches(false);
+			writeJCaches(false);
 		}
 
 		newPage();
@@ -171,10 +173,11 @@ public class PdfCoreReport extends PdfAbstractReport {
 			writeCounterDetails(pdfJobCounterReport);
 		}
 
-		if (isCacheEnabled()) {
+		if (isCacheEnabled() || isJCacheEnabled()) {
 			addToDocument(new Phrase("\n", normalFont));
 			addParagraph(getString("Caches_detailles"), "caches.png");
 			writeCaches(true);
+			writeJCaches(true);
 		}
 
 		writeDurationAndOverhead();
@@ -226,7 +229,7 @@ public class PdfCoreReport extends PdfAbstractReport {
 			if (jrobins.isEmpty()) {
 				return;
 			}
-			graphs = new ArrayList<byte[]>(jrobins.size());
+			graphs = new ArrayList<>(jrobins.size());
 			for (final JRobin jrobin : jrobins) {
 				graphs.add(jrobin.graph(range, SMALL_GRAPH_WIDTH, SMALL_GRAPH_HEIGHT));
 			}
@@ -280,7 +283,7 @@ public class PdfCoreReport extends PdfAbstractReport {
 
 	private List<PdfCounterReport> writeCounters(List<Counter> counters)
 			throws IOException, DocumentException {
-		final List<PdfCounterReport> pdfCounterReports = new ArrayList<PdfCounterReport>();
+		final List<PdfCounterReport> pdfCounterReports = new ArrayList<>();
 		for (final Counter counter : counters) {
 			pdfCounterReports.add(writeCounter(counter));
 		}
@@ -289,12 +292,16 @@ public class PdfCoreReport extends PdfAbstractReport {
 
 	private PdfCounterReport writeCounter(Counter counter) throws DocumentException, IOException {
 		final String counterLabel = getString(counter.getName() + "Label");
-		addParagraph(getFormattedString("Statistiques_compteur", counterLabel) + " - "
-				+ range.getLabel(), counter.getIconName());
+		addParagraph(addRangeLabel(getFormattedString("Statistiques_compteur", counterLabel)),
+				counter.getIconName());
 		final PdfCounterReport pdfCounterReport = new PdfCounterReport(collector, counter, range,
 				false, getDocument());
 		pdfCounterReport.toPdf();
 		return pdfCounterReport;
+	}
+
+	private String addRangeLabel(String s) {
+		return s + " - " + range.getLabel() + ' ' + getString("depuis_minuit");
 	}
 
 	private void writeCountersDetails(List<PdfCounterReport> pdfCounterReports)
@@ -307,12 +314,13 @@ public class PdfCoreReport extends PdfAbstractReport {
 	private void writeCounterDetails(PdfCounterReport pdfCounterReport)
 			throws DocumentException, IOException {
 		final String counterLabel = getString(pdfCounterReport.getCounterName() + "Label");
-		addParagraph(getFormattedString("Statistiques_compteur_detaillees", counterLabel) + " - "
-				+ range.getLabel(), pdfCounterReport.getCounterIconName());
+		addParagraph(
+				addRangeLabel(getFormattedString("Statistiques_compteur_detaillees", counterLabel)),
+				pdfCounterReport.getCounterIconName());
 		pdfCounterReport.writeRequestDetails();
 		if (pdfCounterReport.isErrorCounter()) {
-			addParagraph(getString(pdfCounterReport.getCounterName() + "ErrorLabel") + " - "
-					+ range.getLabel(), pdfCounterReport.getCounterIconName());
+			addParagraph(addRangeLabel(getString(pdfCounterReport.getCounterName() + "ErrorLabel")),
+					pdfCounterReport.getCounterIconName());
 			pdfCounterReport.writeErrorDetails();
 		}
 	}
@@ -320,7 +328,7 @@ public class PdfCoreReport extends PdfAbstractReport {
 	private List<PdfCounterRequestContextReport> writeCurrentRequests(
 			JavaInformations javaInformations, List<Counter> counters,
 			List<PdfCounterReport> pdfCounterReports) throws IOException, DocumentException {
-		final List<PdfCounterRequestContextReport> pdfCounterRequestContextReports = new ArrayList<PdfCounterRequestContextReport>();
+		final List<PdfCounterRequestContextReport> pdfCounterRequestContextReports = new ArrayList<>();
 		final List<CounterRequestContext> rootCurrentContexts;
 		if (currentRequests == null) {
 			rootCurrentContexts = collector.getRootCurrentContexts(counters);
@@ -390,6 +398,38 @@ public class PdfCoreReport extends PdfAbstractReport {
 	private boolean isCacheEnabled() {
 		for (final JavaInformations javaInformations : javaInformationsList) {
 			if (javaInformations.isCacheEnabled()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void writeJCaches(boolean includeDetails) throws DocumentException {
+		String eol = "";
+		if (isCacheEnabled()) {
+			// new line in case there are both cache and jcache
+			eol = "\n";
+		}
+		for (final JavaInformations javaInformations : javaInformationsList) {
+			if (!javaInformations.isJCacheEnabled()) {
+				continue;
+			}
+			final List<JCacheInformations> jcacheInformationsList = javaInformations
+					.getJCacheInformationsList();
+			final String msg = getFormattedString("caches_sur", jcacheInformationsList.size(),
+					javaInformations.getHost());
+			addToDocument(new Phrase(eol + msg, boldFont));
+
+			if (includeDetails) {
+				new PdfJCacheInformationsReport(jcacheInformationsList, getDocument()).toPdf();
+			}
+			eol = "\n";
+		}
+	}
+
+	private boolean isJCacheEnabled() {
+		for (final JavaInformations javaInformations : javaInformationsList) {
+			if (javaInformations.isJCacheEnabled()) {
 				return true;
 			}
 		}

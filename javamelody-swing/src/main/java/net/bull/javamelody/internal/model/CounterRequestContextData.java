@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -69,9 +69,7 @@ public class CounterRequestContextData {
 		}
 		for (final CounterRequestContext context : contexts) {
 			allContexts.add(context);
-			for (final CounterRequestContext childContext : context.getChildContexts()) {
-				allContexts.add(childContext);
-			}
+			allContexts.addAll(context.getChildContexts());
 		}
 		final Map<String, CounterRequest> requestsById = mapAllRequestsById();
 		for (final CounterRequestContext context : allContexts) {

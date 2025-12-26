@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -57,7 +57,7 @@ public interface CounterRequestMXBean {
 			this.warningThreshold = aggregation.getWarningThreshold();
 			this.severeThreshold = aggregation.getSevereThreshold();
 
-			this.requests = new TreeMap<String, CounterRequestData>();
+			this.requests = new TreeMap<>();
 			final List<CounterRequest> requestList = aggregation.getRequests();
 			for (final CounterRequest request : requestList) {
 				requests.put(request.getName(), new CounterRequestData(request));
@@ -132,7 +132,7 @@ public interface CounterRequestMXBean {
 			return request.getSystemErrorPercentage();
 		}
 
-		public int getResponseSizeMean() {
+		public long getResponseSizeMean() {
 			return request.getResponseSizeMean();
 		}
 	}

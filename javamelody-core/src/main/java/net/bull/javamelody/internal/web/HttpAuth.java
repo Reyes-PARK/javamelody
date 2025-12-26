@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -18,6 +18,7 @@
 package net.bull.javamelody.internal.web;
 
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -25,11 +26,11 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.internal.common.LOG;
+import net.bull.javamelody.internal.common.MessageDigestPasswordEncoder;
 import net.bull.javamelody.internal.model.Base64Coder;
 
 /**
@@ -68,7 +69,7 @@ public class HttpAuth {
 		// security based on user / password (BASIC auth)
 		final String authUsersInParam = Parameter.AUTHORIZED_USERS.getValue();
 		if (authUsersInParam != null && !authUsersInParam.trim().isEmpty()) {
-			final List<String> authorizedUsers = new ArrayList<String>();
+			final List<String> authorizedUsers = new ArrayList<>();
 			// we split on new line or on comma
 			for (final String authUser : authUsersInParam.split("[\n,]")) {
 				final String authUserTrim = authUser.trim();
@@ -112,8 +113,9 @@ public class HttpAuth {
 	 * Check if the user is authorized, when using the "authorized-users" parameter
 	 * @param httpRequest HttpServletRequest
 	 * @return true if the user is authorized
+	 * @throws IOException e
 	 */
-	private boolean isUserAuthorized(HttpServletRequest httpRequest) {
+	private boolean isUserAuthorized(HttpServletRequest httpRequest) throws IOException {
 		if (authorizedUsers == null) {
 			return true;
 		}
@@ -125,13 +127,60 @@ public class HttpAuth {
 		if (!auth.toUpperCase(Locale.ENGLISH).startsWith("BASIC ")) {
 			return false; // we only do BASIC
 		}
-		// Get encoded "user:password", comes after "BASIC "
-		final String userpassEncoded = auth.substring("BASIC ".length());
+		// Get base64 encoded "user:password", comes after "BASIC "
+		final String userpassBase64 = auth.substring("BASIC ".length());
 		// Decode it
-		final String userpassDecoded = Base64Coder.decodeString(userpassEncoded);
+		final String userpass = Base64Coder.decodeString(userpassBase64);
 
-		final boolean authOk = authorizedUsers.contains(userpassDecoded);
+		boolean authOk = false;
+		for (final String authorizedUser : authorizedUsers) {
+			// Hash password in userpass, if password is hashed in authorizedUser
+			final String userpassEncoded = getUserPasswordEncoded(userpass, authorizedUser);
+			if (userpassEncoded != null) {
+				// case of hashed password like authorized-users=user:{SHA-256}c33d66fe65ffcca1f2260e6982dbf0c614b6ea3ddfdb37d6142fbec0feca5245
+				if (authorizedUser.equals(userpassEncoded)) {
+					authOk = true;
+					break;
+				}
+				continue;
+			}
+			// case of clear test password like authorized-users=user:password
+			if (authorizedUser.equals(userpass)) {
+				authOk = true;
+				break;
+			}
+		}
 		return checkLockAgainstBruteForceAttack(authOk);
+	}
+
+	private String getUserPasswordEncoded(String userpassDecoded, String authorizedUser)
+			throws IOException {
+		final int indexOfStart = authorizedUser.indexOf(":{");
+		if (indexOfStart != -1) {
+			final int indexOfEnd = authorizedUser.indexOf('}', indexOfStart);
+			if (indexOfEnd != -1) {
+				final String algorithm = authorizedUser.substring(indexOfStart + 2, indexOfEnd);
+				final int indexOfColon = userpassDecoded.indexOf(':');
+				if (indexOfColon != -1) {
+					// case of hashed password like authorized-users=user:{SHA-256}c33d66fe65ffcca1f2260e6982dbf0c614b6ea3ddfdb37d6142fbec0feca5245
+					final String pass = userpassDecoded.substring(indexOfColon + 1);
+					return userpassDecoded.substring(0, indexOfColon + 1)
+							+ encodePassword(algorithm, pass);
+				}
+			}
+		}
+		return null;
+	}
+
+	private String encodePassword(String algorithm, String password) throws IOException {
+		try {
+			return new MessageDigestPasswordEncoder(algorithm).encodePassword(password);
+		} catch (final NoSuchAlgorithmException e) {
+			// if algorithm in the authorized-users parameter is not available, such as SHA3-256 in Java 8,
+			// throw an exception to say that the algorithm is invalid here,
+			// (and that another such as SHA-256 should be used instead)
+			throw new IOException(e);
+		}
 	}
 
 	private boolean checkLockAgainstBruteForceAttack(boolean authOk) {

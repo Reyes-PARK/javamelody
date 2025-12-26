@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -20,8 +20,8 @@ package net.bull.javamelody.internal.web;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import javax.servlet.ServletOutputStream;
-import javax.servlet.WriteListener;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.WriteListener;
 
 /**
  * Output stream pour un filtre implémentant {@link ServletOutputStream} à partir d'un autre ServletOutputStream ou d'un OutputStream.

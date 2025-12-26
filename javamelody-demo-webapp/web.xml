@@ -28,14 +28,6 @@
 		<param-value>true</param-value>
 	</context-param>
 	<context-param>
-		<param-name>javamelody.sampling-seconds</param-name>
-		<param-value>1</param-value>
-	</context-param>
-	<context-param>
-		<param-name>javamelody.sampling-excluded-packages</param-name>
-		<param-value>java,sun,com.sun,javax,org.apache,org.h2</param-value>
-	</context-param>
-	<context-param>
 		<param-name>javamelody.log</param-name>
 		<param-value>true</param-value>
 	</context-param>
@@ -53,11 +45,6 @@
 	<context-param>
 		<param-name>javamelody.http-transform-pattern</param-name>
 		<param-value>[A-F,0-9]+\.cache</param-value>
-	</context-param>
-	<!-- paramétrage de l'ihm swing avec la dernière version construite depuis le trunk -->
-	<context-param>
-		<param-name>javamelody.javamelody-swing-url</param-name>
-		<param-value>https://javamelody.ci.cloudbees.com/job/javamelody-swing%20ant/lastSuccessfulBuild/artifact/javamelody-swing/javamelody-swing.jar</param-value>
 	</context-param>
 	<context-param>
 		<param-name>javamelody.custom-reports</param-name>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -28,7 +28,6 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -40,7 +39,6 @@ import java.util.TreeMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import javax.servlet.ServletContext;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -50,6 +48,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
+import jakarta.servlet.ServletContext;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.internal.common.InputOutput;
 import net.bull.javamelody.internal.common.LOG;
@@ -62,10 +61,12 @@ import net.bull.javamelody.internal.common.Parameters;
 public final class MavenArtifact implements Serializable {
 	private static final long serialVersionUID = 1L;
 
-	private static final String MAVEN_CENTRAL = "http://repo1.maven.org/maven2";
+	private static final String MAVEN_CENTRAL = "https://repo1.maven.org/maven2";
 
 	private static final File LOCAL_REPO = new File(
 			System.getProperty("user.home") + "/.m2/repository");
+
+	private static final String TOMCAT_ARCHIVES = "https://archive.apache.org/dist/tomcat/";
 
 	private static Map<String, String> sourceFilePathsByJarFileNames;
 
@@ -77,8 +78,10 @@ public final class MavenArtifact implements Serializable {
 	private String artifactId;
 	private String version;
 	private MavenArtifact parent;
-	private final Map<String, String> licenseUrlsByName = new LinkedHashMap<String, String>();
-	private final List<MavenArtifact> dependencies = new ArrayList<MavenArtifact>();
+	private final Map<String, String> licenseUrlsByName = new LinkedHashMap<>();
+	private Map<String, String> properties;
+	private final List<MavenArtifact> dependencies = new ArrayList<>();
+	private final List<MavenArtifact> managedDependencies = new ArrayList<>();
 	private boolean updated;
 
 	private MavenArtifact() {
@@ -102,13 +105,27 @@ public final class MavenArtifact implements Serializable {
 			final Document doc = dBuilder.parse(pomXml);
 			final Node projectNode = doc.getElementsByTagName("project").item(0);
 			final NodeList childNodes = projectNode.getChildNodes();
+			properties = new HashMap<>();
 			for (int i = 0; i < childNodes.getLength(); i++) {
 				final Node node = childNodes.item(i);
 				parseNode(node);
 			}
-		} catch (final ParserConfigurationException e) {
-			throw new IOException(e.getMessage(), e);
-		} catch (final SAXException e) {
+			properties.put("project.groupId", groupId);
+			properties.put("pom.groupId", groupId);
+			properties.put("groupId", groupId);
+			properties.put("project.version", version);
+			properties.put("pom.version", version);
+			properties.put("version", version);
+			for (final MavenArtifact dependency : dependencies) {
+				dependency.groupId = replaceProperty(dependency.groupId, properties);
+				dependency.version = replaceProperty(dependency.version, properties);
+			}
+			for (final MavenArtifact dependency : managedDependencies) {
+				dependency.groupId = replaceProperty(dependency.groupId, properties);
+				dependency.version = replaceProperty(dependency.version, properties);
+			}
+			properties = null;
+		} catch (final ParserConfigurationException | SAXException e) {
 			throw new IOException(e.getMessage(), e);
 		}
 		updated = true;
@@ -117,7 +134,6 @@ public final class MavenArtifact implements Serializable {
 	// CHECKSTYLE:OFF
 	private void parseNode(Node node) {
 		// CHECKSTYLE:ON
-		final Map<String, String> properties = new HashMap<String, String>();
 		final String nodeName = node.getNodeName();
 		if ("name".equals(nodeName)) {
 			this.name = node.getTextContent();
@@ -138,18 +154,15 @@ public final class MavenArtifact implements Serializable {
 		} else if ("licenses".equals(nodeName)) {
 			parseLicensesNode(node);
 		} else if ("dependencies".equals(nodeName)) {
-			parseDependenciesNode(node);
-			// note: dependencyManagement is currently ignored
-		}
-		properties.put("project.groupId", groupId);
-		properties.put("pom.groupId", groupId);
-		properties.put("groupId", groupId);
-		properties.put("project.version", version);
-		properties.put("pom.version", version);
-		properties.put("version", version);
-		for (final MavenArtifact dependency : dependencies) {
-			dependency.groupId = replaceProperty(dependency.groupId, properties);
-			dependency.version = replaceProperty(dependency.version, properties);
+			this.dependencies.addAll(parseDependenciesNode(node));
+		} else if ("dependencyManagement".equals(nodeName)) {
+			final NodeList childNodes = node.getChildNodes();
+			for (int i = 0; i < childNodes.getLength(); i++) {
+				final Node childNode = childNodes.item(i);
+				if ("dependencies".equals(childNode.getNodeName())) {
+					this.managedDependencies.addAll(parseDependenciesNode(childNode));
+				}
+			}
 		}
 	}
 
@@ -182,16 +195,16 @@ public final class MavenArtifact implements Serializable {
 	}
 
 	private Map<String, String> parsePropertiesNode(Node propertiesNode) {
-		final Map<String, String> properties = new HashMap<String, String>();
+		final Map<String, String> props = new HashMap<>();
 		final NodeList propertiesNodes = propertiesNode.getChildNodes();
 		for (int j = 0; j < propertiesNodes.getLength(); j++) {
 			final Node propertyNode = propertiesNodes.item(j);
 			final String nodeName = propertyNode.getNodeName();
 			if (nodeName != null) {
-				properties.put(nodeName, propertyNode.getTextContent());
+				props.put(nodeName, propertyNode.getTextContent());
 			}
 		}
-		return properties;
+		return props;
 	}
 
 	private void parseLicensesNode(Node licensesNode) {
@@ -225,8 +238,9 @@ public final class MavenArtifact implements Serializable {
 	}
 
 	// CHECKSTYLE:OFF
-	private void parseDependenciesNode(Node dependenciesNode) {
+	private List<MavenArtifact> parseDependenciesNode(Node dependenciesNode) {
 		// CHECKSTYLE:ON
+		final List<MavenArtifact> deps = new ArrayList<>();
 		final NodeList dependencyNodes = dependenciesNode.getChildNodes();
 		for (int j = 0; j < dependencyNodes.getLength(); j++) {
 			final Node dependencyNode = dependencyNodes.item(j);
@@ -250,12 +264,12 @@ public final class MavenArtifact implements Serializable {
 						optional = childDependencyNode.getTextContent();
 					}
 				}
-				if ((scope == null || "compile".equals(scope))
-						&& (optional == null || !"true".equals(optional))) {
-					dependencies.add(dependency);
+				if ((scope == null || "compile".equals(scope)) && !"true".equals(optional)) {
+					deps.add(dependency);
 				}
 			}
 		}
+		return deps;
 	}
 
 	private void update() throws IOException {
@@ -264,11 +278,8 @@ public final class MavenArtifact implements Serializable {
 			final String filePath = getPath(".pom");
 			final File pomXml = getMavenArtifact(filePath);
 			if (pomXml != null) {
-				final InputStream input = new FileInputStream(pomXml);
-				try {
+				try (InputStream input = new FileInputStream(pomXml)) {
 					parsePomXml(input);
-				} finally {
-					input.close();
 				}
 			}
 		}
@@ -318,6 +329,19 @@ public final class MavenArtifact implements Serializable {
 	//	List<MavenArtifact> getDependencies() {
 	//		return dependencies;
 	//	}
+	//
+	//	List<MavenArtifact> getManagedDependencies() {
+	//		return managedDependencies;
+	//	}
+
+	private List<MavenArtifact> getAllManagedDependencies() throws IOException {
+		update();
+		final List<MavenArtifact> allManagedDependencies = new ArrayList<>(managedDependencies);
+		if (parent != null) {
+			allManagedDependencies.addAll(parent.getAllManagedDependencies());
+		}
+		return allManagedDependencies;
+	}
 
 	List<MavenArtifact> getAllDependencies() throws IOException {
 		return getAllDependencies(1);
@@ -330,15 +354,24 @@ public final class MavenArtifact implements Serializable {
 		}
 		// update dependencies if needed
 		update();
-		final List<MavenArtifact> transitiveDependencies = new ArrayList<MavenArtifact>();
+		final List<MavenArtifact> transitiveDependencies = new ArrayList<>();
+		final List<MavenArtifact> allManagedDependencies = getAllManagedDependencies();
 		for (final MavenArtifact dependency : dependencies) {
+			if (dependency.version == null) {
+				for (final MavenArtifact managedDependency : allManagedDependencies) {
+					if (dependency.isSame(managedDependency)) {
+						dependency.version = managedDependency.version;
+						break;
+					}
+				}
+			}
 			transitiveDependencies.addAll(dependency.getAllDependencies(level + 1));
 		}
 		if (parent != null) {
 			transitiveDependencies.addAll(parent.getAllDependencies(level + 1));
 		}
 
-		final List<MavenArtifact> allDependencies = new ArrayList<MavenArtifact>(dependencies);
+		final List<MavenArtifact> allDependencies = new ArrayList<>(dependencies);
 		for (final MavenArtifact transitiveDependency : transitiveDependencies) {
 			if (!transitiveDependency.isContained(allDependencies)) {
 				allDependencies.add(transitiveDependency);
@@ -349,11 +382,15 @@ public final class MavenArtifact implements Serializable {
 
 	private boolean isContained(List<MavenArtifact> artifacts) {
 		for (final MavenArtifact artifact : artifacts) {
-			if (groupId.equals(artifact.groupId) && artifactId.equals(artifact.artifactId)) {
+			if (isSame(artifact)) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	private boolean isSame(MavenArtifact artifact) {
+		return groupId.equals(artifact.groupId) && artifactId.equals(artifact.artifactId);
 	}
 
 	private String getPath(String extension) {
@@ -369,7 +406,7 @@ public final class MavenArtifact implements Serializable {
 		// when pom.xml not available in some jar files,
 		// list all dependencies in webapp's pom.xml if it exists or in the other dependencies' pom.xml,
 		// including transitive dependencies
-		final List<MavenArtifact> allDependencies = new ArrayList<MavenArtifact>(
+		final List<MavenArtifact> allDependencies = new ArrayList<>(
 				getWebappDependenciesFromPomXml());
 		for (final MavenArtifact dependency : webappDependencies.values()) {
 			if (dependency != null && !dependency.isContained(allDependencies)) {
@@ -386,7 +423,8 @@ public final class MavenArtifact implements Serializable {
 			if (entry.getValue() == null) {
 				final String jarFileName = entry.getKey();
 				for (final MavenArtifact dependency : allDependencies) {
-					if (jarFileName.startsWith(dependency.getArtifactId() + '-')) {
+					if (jarFileName.startsWith(
+							dependency.getArtifactId() + '-' + dependency.getVersion())) {
 						entry.setValue(dependency);
 						break;
 					}
@@ -422,7 +460,7 @@ public final class MavenArtifact implements Serializable {
 		if (dependencies == null || dependencies.isEmpty()) {
 			return Collections.emptyMap();
 		}
-		final Map<String, MavenArtifact> result = new TreeMap<String, MavenArtifact>();
+		final Map<String, MavenArtifact> result = new TreeMap<>();
 		for (final String dependency : dependencies) {
 			if (dependency.endsWith(".jar") || dependency.endsWith(".JAR")) {
 				final String fileName = dependency.substring(directory.length());
@@ -490,12 +528,23 @@ public final class MavenArtifact implements Serializable {
 	}
 
 	public static File getSourceJarFile(URL classesJarFileUrl) throws IOException {
+		final String file = classesJarFileUrl.getFile();
+		if (file.endsWith(".jar")) {
+			final File sources = new File(file.replace(".jar", "-sources.jar"));
+			if (sources.exists()) {
+				return sources;
+			}
+		}
 		final byte[] pomProperties = readMavenFileFromJarFile(classesJarFileUrl, "pom.properties");
 		if (pomProperties == null) {
 			final Map<String, String> sourceFilePaths = getSourceFilePathsByJarFileNames();
-			final String file = classesJarFileUrl.getFile();
-			final String sourceFilePath = sourceFilePaths
-					.get(file.substring(file.lastIndexOf('/') + 1));
+			String jarFileName = file;
+			if (jarFileName.endsWith("!/")) {
+				// remove "!/" at the end, for spring-boot launched with "java -jar"
+				jarFileName = jarFileName.substring(0, jarFileName.length() - "!/".length());
+			}
+			jarFileName = jarFileName.substring(jarFileName.lastIndexOf('/') + 1);
+			final String sourceFilePath = sourceFilePaths.get(jarFileName);
 			if (sourceFilePath != null) {
 				return getMavenArtifact(sourceFilePath);
 			}
@@ -515,7 +564,7 @@ public final class MavenArtifact implements Serializable {
 			throws IOException {
 		if (sourceFilePathsByJarFileNames == null) {
 			final Map<String, MavenArtifact> webappDependencies = getWebappDependencies();
-			final Map<String, String> sourceFilePaths = new HashMap<String, String>();
+			final Map<String, String> sourceFilePaths = new HashMap<>();
 			for (final Map.Entry<String, MavenArtifact> entry : webappDependencies.entrySet()) {
 				final String jarFileName = entry.getKey();
 				final MavenArtifact dependency = entry.getValue();
@@ -529,7 +578,12 @@ public final class MavenArtifact implements Serializable {
 		return sourceFilePathsByJarFileNames;
 	}
 
-	private static File getMavenArtifact(String filePath) throws IOException {
+	private static File getMavenArtifact(String filePath) {
+		if (filePath.contains("${")) {
+			// si le chemin contient des variables non résolues telles que ${project.version},
+			// ce n'est pas la peine de chercher
+			return null;
+		}
 		final File storageDirectory = Parameters
 				.getStorageDirectory(Parameters.getCurrentApplication());
 		final String subDirectory;
@@ -550,19 +604,45 @@ public final class MavenArtifact implements Serializable {
 					return new File(url);
 				}
 				mkdirs(file.getParentFile());
-				final OutputStream output = new FileOutputStream(file);
-				try {
+				try (OutputStream output = new FileOutputStream(file)) {
 					final LabradorRetriever labradorRetriever = new LabradorRetriever(new URL(url));
 					labradorRetriever.downloadTo(output);
 					// si trouvé, on arrête
 					break;
 				} catch (final IOException e) {
-					output.close();
 					InputOutput.deleteFile(file);
 					// si non trouvé, on continue avec le repo suivant s'il y en a un
-				} finally {
-					output.close();
 				}
+			}
+		}
+		if (file.exists()) {
+			return file;
+		}
+		return null;
+	}
+
+	public static File getTomcatSrcZipFile() {
+		final String serverInfo = Parameters.getServletContext().getServerInfo();
+		if (!serverInfo.matches("Apache Tomcat/\\d+\\.\\d+\\.\\d+")) {
+			// si pas Tomcat ou si Tomcat version x.0.0.My, tant pis
+			return null;
+		}
+		final String version = serverInfo.substring(serverInfo.lastIndexOf('/') + 1);
+		final String fileName = "apache-tomcat-" + version + "-src.zip";
+		final File storageDirectory = Parameters
+				.getStorageDirectory(Parameters.getCurrentApplication());
+		final String subDirectory = "sources";
+		final File file = new File(storageDirectory, subDirectory + '/' + fileName);
+		if (!file.exists() || file.length() == 0) {
+			final String majorVersion = version.substring(0, version.indexOf('.'));
+			final String url = TOMCAT_ARCHIVES + "tomcat-" + majorVersion + "/v" + version + "/src/"
+					+ fileName;
+			mkdirs(file.getParentFile());
+			try (OutputStream output = new FileOutputStream(file)) {
+				final LabradorRetriever labradorRetriever = new LabradorRetriever(new URL(url));
+				labradorRetriever.downloadTo(output);
+			} catch (final IOException e) {
+				InputOutput.deleteFile(file);
 			}
 		}
 		if (file.exists()) {
@@ -579,9 +659,8 @@ public final class MavenArtifact implements Serializable {
 
 	private static byte[] readMavenFileFromJarFile(URL jarFileLocation, String pomFileName)
 			throws IOException {
-		final ZipInputStream zipInputStream = new ZipInputStream(
-				new BufferedInputStream(jarFileLocation.openStream(), 4096));
-		try {
+		try (ZipInputStream zipInputStream = new ZipInputStream(
+				new BufferedInputStream(jarFileLocation.openStream(), 4096))) {
 			ZipEntry entry = zipInputStream.getNextEntry();
 			while (entry != null) {
 				if (entry.getName().startsWith("META-INF/maven/")
@@ -591,8 +670,6 @@ public final class MavenArtifact implements Serializable {
 				zipInputStream.closeEntry();
 				entry = zipInputStream.getNextEntry();
 			}
-		} finally {
-			zipInputStream.close();
 		}
 		return null;
 	}
@@ -600,13 +677,13 @@ public final class MavenArtifact implements Serializable {
 	private static List<String> getMavenRepositories() {
 		final String parameter = Parameter.MAVEN_REPOSITORIES.getValue();
 		if (parameter != null) {
-			final List<String> result = new ArrayList<String>();
+			final List<String> result = new ArrayList<>();
 			for (final String repo : parameter.split(",")) {
 				result.add(repo.trim());
 			}
 			return result;
 		}
-		return Arrays.asList(LOCAL_REPO.getPath(), MAVEN_CENTRAL);
+		return List.of(LOCAL_REPO.getPath(), MAVEN_CENTRAL);
 	}
 
 	private static String replaceProperty(String value, Map<String, String> properties) {

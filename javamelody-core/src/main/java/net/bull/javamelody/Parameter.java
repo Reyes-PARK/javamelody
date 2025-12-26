@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -43,6 +43,11 @@ public enum Parameter {
 	 * soit considéré comme obsolète et soit supprimé automatiquement, à minuit (365 par défaut, soit 1 an).
 	 */
 	OBSOLETE_STATS_DAYS("obsolete-stats-days"),
+
+	/**
+	 * Maximum of disk usage by rrd files (20 MB by default).
+	 */
+	MAX_RRD_DISK_USAGE_MB("max-rrd-disk-usage-mb"),
 
 	/**
 	 * Période en secondes du sampling pour trouver les hotspots (null par défaut : pas de sampling).
@@ -207,6 +212,11 @@ public enum Parameter {
 	X_FRAME_OPTIONS("x-frame-options"),
 
 	/**
+	 * Parameter to enable or disable the Content Security Policy header (true by default).
+	 */
+	CONTENT_SECURITY_POLICY_ENABLED("content-security-policy-enabled"),
+
+	/**
 	 * Expression régulière (null par défaut) pour restreindre l'accès au monitoring à certaines adresses IP.
 	 */
 	ALLOWED_ADDR_PATTERN("allowed-addr-pattern"),
@@ -367,6 +377,12 @@ public enum Parameter {
 	STATSD_ADDRESS("statsd-address"),
 
 	/**
+	 * Prefix of metrics that are sent to the <a href='https://github.com/etsy/statsd'>StatsD</a> server.
+	 * Default value is "javamelody.context.host." where context and host gets replaced by the actual values.
+	 */
+	STATSD_PREFIX("statsd-prefix"),
+
+	/**
 	 * Namespace to use in <a href='https://aws.amazon.com/cloudwatch/'>AWS CloudWatch</a> to send metrics,
 	 * for example "MyCompany/MyAppDomain" (null by default).
 	 */
@@ -384,10 +400,20 @@ public enum Parameter {
 	INFLUXDB_URL("influxdb-url"),
 
 	/**
+	 * API token for InfluxDB authentication, which can be used instead of basic authentication with username and password or token in the InfluxDB URL (null by default).
+	 */
+	INFLUXDB_API_TOKEN("influxdb-api-token"),
+
+	/**
 	 * API key of the <a href='https://www.datadoghq.com/'>Datadog</a> to send metrics,
 	 * for example: 9775a026f1ca7d1c6c5af9d94d9595a4 (null by default).
 	 */
-	DATADOG_API_KEY("datadog-api-key");
+	DATADOG_API_KEY("datadog-api-key"),
+
+	/**
+	 * <a href='https://www.datadog.com/'>Datadog</a> host for accessing API. 'api.datadoghq.com' is default.
+	 */
+	DATADOG_API_HOST("datadog-api-host");
 
 	private final String code;
 

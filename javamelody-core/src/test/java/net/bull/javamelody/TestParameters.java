@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,10 +17,6 @@
  */
 package net.bull.javamelody;
 
-import static org.easymock.EasyMock.createNiceMock;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.replay;
-import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -30,15 +26,13 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.Locale;
-
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletContext;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletContext;
 import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.model.Period;
 import net.bull.javamelody.internal.model.TransportFormat;
@@ -88,37 +82,6 @@ public class TestParameters {
 	@Test
 	public void testGetResourcePath() {
 		assertNotNull("getResourcePath", Parameters.getResourcePath("resource"));
-	}
-
-	/** Test.
-	 * @throws MalformedURLException e */
-	@Test
-	public void testGetContextPath() throws MalformedURLException {
-		final String path = "path";
-		ServletContext context = createNiceMock(ServletContext.class);
-		expect(context.getMajorVersion()).andReturn(3).anyTimes();
-		expect(context.getMinorVersion()).andReturn(0).anyTimes();
-		expect(context.getContextPath()).andReturn(path).anyTimes();
-		replay(context);
-		assertEquals("getContextPath", path, Parameters.getContextPath(context));
-		verify(context);
-
-		context = createNiceMock(ServletContext.class);
-		expect(context.getMajorVersion()).andReturn(2).anyTimes();
-		expect(context.getMinorVersion()).andReturn(5).anyTimes();
-		expect(context.getContextPath()).andReturn(path).anyTimes();
-		replay(context);
-		assertEquals("getContextPath", path, Parameters.getContextPath(context));
-		verify(context);
-
-		context = createNiceMock(ServletContext.class);
-		expect(context.getMajorVersion()).andReturn(2).anyTimes();
-		expect(context.getMinorVersion()).andReturn(4).anyTimes();
-		final URL url = getClass().getResource("/WEB-INF/web.xml");
-		expect(context.getResource("/WEB-INF/web.xml")).andReturn(url).anyTimes();
-		replay(context);
-		assertNotNull("getContextPath", Parameters.getContextPath(context));
-		verify(context);
 	}
 
 	/** Test. */
@@ -174,19 +137,6 @@ public class TestParameters {
 
 	/** Test. */
 	@Test
-	public void testGetParameterValue() {
-		assertNull("getParameter", Parameter.DATASOURCES.getValue());
-	}
-
-	/** Test. */
-	@Test
-	public void testParameterValueOfIgnoreCase() {
-		assertNotNull("Parameter.valueOfIgnoreCase",
-				Parameter.valueOfIgnoreCase(Parameter.DISABLED.toString()));
-	}
-
-	/** Test. */
-	@Test
 	public void testPeriodValueOfIgnoreCase() {
 		assertNotNull("Period.valueOfIgnoreCase", Period.valueOfIgnoreCase(Period.TOUT.toString()));
 	}
@@ -208,7 +158,7 @@ public class TestParameters {
 		final int size = Parameters.getCollectorUrlsByApplications().size();
 		try {
 			Parameters.addCollectorApplication(application,
-					Parameters.parseUrl("http://localhost:8090/test"));
+					Parameters.parseUrls("http://localhost:8090/test"));
 			assertEquals("addCollectorApplication", size + 1,
 					Parameters.getCollectorUrlsByApplications().size());
 			Parameters.removeCollectorApplication(application);
@@ -216,7 +166,7 @@ public class TestParameters {
 					Parameters.getCollectorUrlsByApplications().size());
 			// pour que le test ait une application à lire la prochaine fois
 			Parameters.addCollectorApplication(application,
-					Parameters.parseUrl("http://localhost:8090/test"));
+					Parameters.parseUrls("http://localhost:8090/test"));
 		} finally {
 			Parameters.removeCollectorApplication(application);
 		}
@@ -227,10 +177,10 @@ public class TestParameters {
 	@Test
 	public void testParseUrl() throws MalformedURLException {
 		setProperty(Parameter.TRANSPORT_FORMAT, TransportFormat.XML.getCode());
-		assertNotNull("parseUrl", Parameters.parseUrl("http://localhost,http://localhost"));
-		assertNotNull("parseUrl", Parameters.parseUrl("http://localhost/"));
+		assertNotNull("parseUrl", Parameters.parseUrls("http://localhost,http://localhost"));
+		assertNotNull("parseUrl", Parameters.parseUrls("http://localhost/"));
 		setProperty(Parameter.TRANSPORT_FORMAT, TransportFormat.SERIALIZED.getCode());
-		assertNotNull("parseUrl", Parameters.parseUrl("http://localhost,http://localhost"));
+		assertNotNull("parseUrl", Parameters.parseUrls("http://localhost,http://localhost"));
 	}
 
 	/** Test. */

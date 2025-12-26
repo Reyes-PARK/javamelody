@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -42,7 +42,7 @@ public final class I18N {
 	// (Parameters.getResourcePath("translations") seul ne fonctionne pas si on est dans un jar/war)
 	private static final String RESOURCE_BUNDLE_BASE_NAME = Parameters
 			.getResourcePath("translations").replace('/', '.').substring(1);
-	private static final ThreadLocal<Locale> LOCALE_CONTEXT = new ThreadLocal<Locale>();
+	private static final ThreadLocal<Locale> LOCALE_CONTEXT = new ThreadLocal<>();
 	// Locale.ROOT needs 1.6
 	private static final Locale ROOT_LOCALE = Locale.ROOT;
 
@@ -109,19 +109,6 @@ public final class I18N {
 	}
 
 	/**
-	 * Retourne une traduction dans la locale courante et l'encode pour affichage en javascript.
-	 * @param key clé d'un libellé dans les fichiers de traduction
-	 * @return String
-	 */
-	public static String getStringForJavascript(String key) {
-		final String string = getString(key);
-		// ici, le résultat ne contient pas de valeur variable ni d'attaque puisque ce sont des messages internes et fixes,
-		// donc pas besoin d'encoder avec javascriptEncode, et on conserve les apostrophes lisibles dans les messages
-		return string.replace("\\", "\\\\").replace("\n", "\\n").replace("\"", "\\\"").replace("'",
-				"\\'");
-	}
-
-	/**
 	 * Retourne une traduction dans la locale courante et insère les arguments aux positions {i}.
 	 * @param key clé d'un libellé dans les fichiers de traduction
 	 * @param arguments Valeur à inclure dans le résultat
@@ -133,18 +120,29 @@ public final class I18N {
 		return new MessageFormat(string, getCurrentLocale()).format(arguments);
 	}
 
-	/**
-	 * Encode pour affichage en javascript.
-	 * @param text message à encoder
-	 * @return String
-	 */
-	public static String javascriptEncode(String text) {
+	public static String urlEncode(String text) {
 		return text.replace("\\", "\\\\").replace("\n", "\\n").replace("\"", "%22").replace("'",
 				"%27");
 	}
 
-	public static String urlEncode(String text) {
-		return javascriptEncode(text);
+	/**
+	 * Encode pour affichage en html.
+	 * @param text message à encoder
+	 * @param encodeSpace booléen selon que les espaces sont encodés en nbsp (insécables)
+	 * @param encodeNewLine booléen selon que les retours à la ligne sont encodés en br
+	 * @return String
+	 */
+	public static String htmlEncode(String text, boolean encodeSpace, boolean encodeNewLine) {
+		// ces encodages html sont incomplets mais suffisants pour le monitoring
+		String result = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+				.replace("'", "&apos;").replace("\"", "&quot;");
+		if (encodeSpace) {
+			result = result.replace(" ", "&nbsp;");
+		}
+		if (encodeNewLine) {
+			result = result.replace("\n", "<br/>");
+		}
+		return result;
 	}
 
 	/**
@@ -154,13 +152,7 @@ public final class I18N {
 	 * @return String
 	 */
 	public static String htmlEncode(String text, boolean encodeSpace) {
-		// ces encodages html sont incomplets mais suffisants pour le monitoring
-		String result = text.replaceAll("[&]", "&amp;").replaceAll("[<]", "&lt;")
-				.replaceAll("[>]", "&gt;").replaceAll("[\n]", "<br/>");
-		if (encodeSpace) {
-			result = result.replaceAll(" ", "&nbsp;");
-		}
-		return result;
+		return htmlEncode(text, encodeSpace, true);
 	}
 
 	/**
@@ -214,7 +206,13 @@ public final class I18N {
 
 	private static DecimalFormatSymbols getDecimalFormatSymbols() {
 		// optimisation mémoire (si Java 1.6)
-		return DecimalFormatSymbols.getInstance(getCurrentLocale());
+		final DecimalFormatSymbols symbols = DecimalFormatSymbols.getInstance(getCurrentLocale());
+		if (symbols.getGroupingSeparator() == '\u202f') {
+			// change le séparateur de milliers en France par le séparateur de milliers d'avant Java 13,
+			// pour les rapports PDF qui ne comprennent pas \u202f (en iText 2.1.7 ou openpdf 1.3.30)
+			symbols.setGroupingSeparator('\u00a0');
+		}
+		return symbols;
 	}
 
 	public static DateFormat createDateFormat() {

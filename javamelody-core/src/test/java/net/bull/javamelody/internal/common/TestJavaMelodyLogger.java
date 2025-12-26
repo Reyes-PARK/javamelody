@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -22,11 +22,10 @@ import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
 import static org.easymock.EasyMock.verify;
 
-import javax.servlet.http.HttpServletRequest;
-
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.http.HttpServletRequest;
 import net.bull.javamelody.JavaMelodyLogger;
 import net.bull.javamelody.Utils;
 
@@ -55,11 +54,9 @@ public class TestJavaMelodyLogger {
 	@Test
 	public void testLoggers() {
 		final JavaMelodyLogger javaLogger = new JavaLogger();
-		final JavaMelodyLogger log4jLogger = new Log4JLogger();
 		final JavaMelodyLogger log4j2Logger = new Log4J2Logger();
 		final JavaMelodyLogger logbackLogger = new LogbackLogger();
 		logs(javaLogger);
-		logs(log4jLogger);
 		logs(log4j2Logger);
 		logs(logbackLogger);
 	}
@@ -80,7 +77,19 @@ public class TestJavaMelodyLogger {
 		expect(request.getHeader("X-Forwarded-For")).andReturn("w.x.y.z").anyTimes();
 
 		replay(request);
-		logger.logHttpRequest(request, "test", 1000, false, 10000, "javamelody");
+		logger.logHttpRequest(request, "test", 1000, false, 200, 10000, "javamelody");
 		verify(request);
+
+		final HttpServletRequest request2 = createNiceMock(HttpServletRequest.class);
+		expect(request2.getRemoteAddr()).andReturn("remote addr").anyTimes();
+		expect(request2.getRequestURI()).andReturn("/test/request").anyTimes();
+		expect(request2.getContextPath()).andReturn("/test").anyTimes();
+		expect(request2.getQueryString()).andReturn(null).anyTimes();
+		expect(request2.getMethod()).andReturn("GET").anyTimes();
+		expect(request2.getHeader("X-Forwarded-For")).andReturn(null).anyTimes();
+
+		replay(request2);
+		logger.logHttpRequest(request2, "test", 1000, true, 500, 10000, "javamelody");
+		verify(request2);
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -161,17 +161,17 @@ class PdfJavaInformationsReport extends PdfAbstractReport {
 			final Image osImage = PdfDocumentFactory.getImage("servers/" + osIconName);
 			osImage.scalePercent(40);
 			osPhrase.add(new Chunk(osImage, 0, 0));
-			osPhrase.add(separator);
+			osPhrase.add(new Chunk(separator));
 		}
-		osPhrase.add(javaInformations.getOS() + " (" + javaInformations.getAvailableProcessors()
-				+ ' ' + getString("coeurs") + ')');
+		osPhrase.add(new Chunk(javaInformations.getOS() + " ("
+				+ javaInformations.getAvailableProcessors() + ' ' + getString("coeurs") + ')'));
 		currentTable.addCell(osPhrase);
 		addCell(getString("Java") + ':');
 		addCell(javaInformations.getJavaVersion());
 		addCell(getString("JVM") + ':');
 		final Phrase jvmVersionPhrase = new Phrase(javaInformations.getJvmVersion(), cellFont);
 		if (javaInformations.getJvmVersion().contains("Client")) {
-			jvmVersionPhrase.add(separator);
+			jvmVersionPhrase.add(new Chunk(separator));
 			final Image alertImage = PdfDocumentFactory.getImage("alert.png");
 			alertImage.scalePercent(50);
 			jvmVersionPhrase.add(new Chunk(alertImage, 0, -2));
@@ -199,12 +199,13 @@ class PdfJavaInformationsReport extends PdfAbstractReport {
 		writeTomcatInformations(javaInformations.getTomcatInformationsList());
 		addCell(getString("Gestion_memoire") + ':');
 		writeMemoryInformations(javaInformations.getMemoryInformations());
-		if (javaInformations.getFreeDiskSpaceInTemp() >= 0) {
-			// on considère que l'espace libre sur le disque dur est celui sur la partition du répertoire temporaire
-			addCell(getString("Free_disk_space") + ':');
-			addCell(integerFormat.format(javaInformations.getFreeDiskSpaceInTemp() / 1024 / 1024)
-					+ ' ' + getString("Mo"));
-		}
+		// on considère que l'espace libre sur le disque dur est celui sur la partition du répertoire temporaire
+		addCell(getString("Free_disk_space") + ':');
+		addCell(integerFormat.format(javaInformations.getFreeDiskSpaceInTemp() / 1024 / 1024) + ' '
+				+ getString("Mo"));
+		addCell(getString("Usable_disk_space") + ':');
+		addCell(integerFormat.format(javaInformations.getUsableDiskSpaceInTemp() / 1024 / 1024)
+				+ ' ' + getString("Mo"));
 		writeDatabaseVersionAndDataSourceDetails(javaInformations);
 		addCell("");
 		addCell("");
@@ -220,9 +221,9 @@ class PdfJavaInformationsReport extends PdfAbstractReport {
 					.getImage("servers/" + applicationServerIconName);
 			applicationServerImage.scalePercent(40);
 			serverInfoPhrase.add(new Chunk(applicationServerImage, 0, 0));
-			serverInfoPhrase.add("   ");
+			serverInfoPhrase.add(new Chunk("   "));
 		}
-		serverInfoPhrase.add(serverInfo);
+		serverInfoPhrase.add(new Chunk(serverInfo));
 		currentTable.addCell(serverInfoPhrase);
 	}
 
@@ -253,8 +254,7 @@ class PdfJavaInformationsReport extends PdfAbstractReport {
 			addCell("");
 			final Anchor anchor = new Anchor("DataSource reference", PdfFonts.BLUE.getFont());
 			anchor.setName("DataSource reference");
-			anchor.setReference(
-					"http://commons.apache.org/dbcp/apidocs/org/apache/commons/dbcp/BasicDataSource.html");
+			anchor.setReference("http://commons.apache.org/proper/commons-dbcp/configuration.html");
 			currentTable.addCell(anchor);
 		}
 	}

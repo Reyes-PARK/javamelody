@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -28,12 +28,11 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.Map;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.Utils;
 import net.bull.javamelody.internal.common.Parameters;
 
@@ -55,11 +54,8 @@ public class TestLabradorRetriever {
 		Utils.setProperty(Parameters.PARAMETER_SYSTEM_PREFIX + "mockLabradorRetriever", "false");
 		final File file = File.createTempFile("test", ".ser");
 		try {
-			final ObjectOutputStream output = new ObjectOutputStream(new FileOutputStream(file));
-			try {
+			try (ObjectOutputStream output = new ObjectOutputStream(new FileOutputStream(file))) {
 				output.writeObject(new Counter("http", null));
-			} finally {
-				output.close();
 			}
 			final URL url = file.toURI().toURL();
 			final LabradorRetriever labradorRetriever = new LabradorRetriever(url);

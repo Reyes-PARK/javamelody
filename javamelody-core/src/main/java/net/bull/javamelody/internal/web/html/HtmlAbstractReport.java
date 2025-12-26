@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -21,8 +21,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.security.SecureRandom;
 
-import javax.servlet.http.HttpSession;
-
+import jakarta.servlet.http.HttpSession;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.SessionListener;
 import net.bull.javamelody.internal.common.HttpParameter;
@@ -57,11 +56,9 @@ public abstract class HtmlAbstractReport {
 				writeDirectly("</thead><tbody>\n");
 			}
 			if (oddRow) {
-				writeDirectly(
-						"<tr class='odd' onmouseover=\"this.className='highlight'\" onmouseout=\"this.className='odd'\">\n");
+				writeDirectly("<tr class='odd'>\n");
 			} else {
-				writeDirectly(
-						"<tr onmouseover=\"this.className='highlight'\" onmouseout=\"this.className=''\">\n");
+				writeDirectly("<tr class='even'>\n");
 			}
 			oddRow = !oddRow; // NOPMD
 		}
@@ -107,8 +104,8 @@ public abstract class HtmlAbstractReport {
 	}
 
 	/**
-	 * Écrit un texte, puis un retour chariot, dans un flux en remplaçant dans le texte les clés entourées de deux '#'
-	 * par leurs traductions dans la locale courante.
+	 * Écrit un texte, puis un retour chariot, dans un flux en remplaçant dans le texte les clés
+	 * entourées de deux '#' par leurs traductions dans la locale courante.
 	 * @param html texte html avec éventuellement des #clé#
 	 * @throws IOException e
 	 */
@@ -128,8 +125,9 @@ public abstract class HtmlAbstractReport {
 	}
 
 	void writeShowHideLink(String idToShow, String label) throws IOException {
-		writeln("<a href=\"javascript:showHide('" + idToShow + "');\" class='noPrint'><img id='"
-				+ idToShow + "Img' src='?resource=bullets/plus.png' alt=''/> " + label + "</a>");
+		writeln("<a href='' class='showHide noPrint' data-show-hide-id='" + idToShow + "' id='"
+				+ idToShow + "A'><img id='" + idToShow
+				+ "Img' src='?resource=bullets/plus.png' alt=''/> " + label + "</a>");
 	}
 
 	/**
@@ -142,15 +140,6 @@ public abstract class HtmlAbstractReport {
 	}
 
 	/**
-	 * Retourne une traduction dans la locale courante et l'encode pour affichage en javascript.
-	 * @param key clé d'un libellé dans les fichiers de traduction
-	 * @return String
-	 */
-	static String getStringForJavascript(String key) {
-		return I18N.getStringForJavascript(key);
-	}
-
-	/**
 	 * Retourne une traduction dans la locale courante et insère les arguments aux positions {i}.
 	 * @param key clé d'un libellé dans les fichiers de traduction
 	 * @param arguments Valeur à inclure dans le résultat
@@ -158,15 +147,6 @@ public abstract class HtmlAbstractReport {
 	 */
 	static String getFormattedString(String key, Object... arguments) {
 		return I18N.getFormattedString(key, arguments);
-	}
-
-	/**
-	 * Encode pour affichage en javascript.
-	 * @param text message à encoder
-	 * @return String
-	 */
-	static String javascriptEncode(String text) {
-		return I18N.javascriptEncode(text);
 	}
 
 	static String urlEncode(String text) {
@@ -191,18 +171,31 @@ public abstract class HtmlAbstractReport {
 		return I18N.htmlEncode(text, false);
 	}
 
+	/**
+	 * Encode pour affichage en html, sans encoder les espaces en nbsp (insécables) et les retours chariots en br.
+	 * @param text message à encoder
+	 * @return String
+	 */
+	static String htmlEncodeButNotSpaceAndNewLine(String text) {
+		return I18N.htmlEncode(text, false, false);
+	}
+
 	public static String getCsrfTokenUrlPart() {
 		if (CSRF_PROTECTION_ENABLED) {
 			final HttpSession currentSession = SessionListener.getCurrentSession();
-			String csrfToken = (String) currentSession
-					.getAttribute(SessionListener.CSRF_TOKEN_SESSION_NAME);
-			if (csrfToken == null) {
-				final byte[] bytes = new byte[16];
-				new SecureRandom().nextBytes(bytes);
-				csrfToken = new String(Base64Coder.encode(bytes));
-				currentSession.setAttribute(SessionListener.CSRF_TOKEN_SESSION_NAME, csrfToken);
+			if (currentSession != null) {
+				String csrfToken = (String) currentSession
+						.getAttribute(SessionListener.CSRF_TOKEN_SESSION_NAME);
+				if (csrfToken == null) {
+					final byte[] bytes = new byte[16];
+					new SecureRandom().nextBytes(bytes);
+					csrfToken = new String(Base64Coder.encode(bytes));
+					// '+' would break in the url parameters
+					csrfToken = csrfToken.replace('+', '0').replace('/', '1');
+					currentSession.setAttribute(SessionListener.CSRF_TOKEN_SESSION_NAME, csrfToken);
+				}
+				return "&amp;" + HttpParameter.TOKEN + '=' + csrfToken;
 			}
-			return "&amp;" + HttpParameter.TOKEN + '=' + csrfToken;
 		}
 		return "";
 	}

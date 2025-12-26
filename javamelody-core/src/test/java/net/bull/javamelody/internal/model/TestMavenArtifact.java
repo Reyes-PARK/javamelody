@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -24,20 +24,24 @@ import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import javax.servlet.ServletContext;
-
 import org.easymock.IAnswer;
+import org.jrobin.graph.RrdGraph;
+import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletContext;
+import net.bull.javamelody.Parameter;
+import net.bull.javamelody.Utils;
 import net.bull.javamelody.internal.common.Parameters;
 
 /**
@@ -45,6 +49,25 @@ import net.bull.javamelody.internal.common.Parameters;
  * @author Emeric Vernat
  */
 public class TestMavenArtifact {
+	private static final String MAVEN_CENTRAL = "https://repo1.maven.org/maven2";
+
+	private static final File LOCAL_REPO = new File(
+			System.getProperty("user.home") + "/.m2/repository");
+
+	private static void rmdir(final File file) {
+		final File[] files = file.listFiles();
+		if (files != null) {
+			for (final File f : files) {
+				f.delete();
+			}
+		}
+	}
+
+	/** Check. */
+	@Before
+	public void setUp() {
+		Utils.initialize();
+	}
 
 	/**
 	 * Test.
@@ -53,8 +76,15 @@ public class TestMavenArtifact {
 	 */
 	@Test
 	public void testGetSourceJarFile() throws ClassNotFoundException, IOException {
+		final File storageDirectory = Parameters
+				.getStorageDirectory(Parameters.getCurrentApplication());
+		rmdir(new File(storageDirectory, "poms"));
+		rmdir(new File(storageDirectory, "sources"));
+
 		final Class<?> clazz = Class.forName("org.apache.commons.dbcp2.BasicDataSource");
 		final URL location = clazz.getProtectionDomain().getCodeSource().getLocation();
+		assertNotNull("getSourceJarFile", MavenArtifact.getSourceJarFile(location));
+		Utils.setProperty(Parameter.MAVEN_REPOSITORIES, LOCAL_REPO.getPath() + ',' + MAVEN_CENTRAL);
 		assertNotNull("getSourceJarFile", MavenArtifact.getSourceJarFile(location));
 	}
 
@@ -71,18 +101,16 @@ public class TestMavenArtifact {
 				.andReturn(Collections.singleton(javamelodyDir)).anyTimes();
 		expect(context.getResourcePaths(javamelodyDir)).andReturn(Collections.singleton(webapp))
 				.anyTimes();
-		final IAnswer<InputStream> answer = new IAnswer<InputStream>() {
-			@Override
-			public InputStream answer() throws Throwable {
-				return getClass().getResourceAsStream("/pom.xml");
-			}
-		};
+		final IAnswer<InputStream> answer = () -> getClass().getResourceAsStream("/pom.xml");
 		expect(context.getResourceAsStream(webapp + "pom.xml")).andAnswer(answer).anyTimes();
-		final Set<String> dependencies = new LinkedHashSet<String>(Arrays.asList(
-				"/WEB-INF/lib/jrobin-1.5.9.jar", "/WEB-INF/lib/javamelody-core-1.65.0.jar"));
+		final Set<String> dependencies = new LinkedHashSet<>(List
+				.of("/WEB-INF/lib/jrobin-1.5.9.jar", "/WEB-INF/lib/javamelody-core-1.65.0.jar"));
 		expect(context.getResourcePaths("/WEB-INF/lib/")).andReturn(dependencies).anyTimes();
-		expect(context.getMajorVersion()).andReturn(2).anyTimes();
-		expect(context.getMinorVersion()).andReturn(5).anyTimes();
+		final URL jrobinJar = RrdGraph.class.getProtectionDomain().getCodeSource().getLocation();
+		expect(context.getResource("/WEB-INF/lib/jrobin-1.5.9.jar")).andReturn(jrobinJar)
+				.anyTimes();
+		expect(context.getMajorVersion()).andReturn(5).anyTimes();
+		expect(context.getMinorVersion()).andReturn(0).anyTimes();
 		replay(context);
 		Parameters.initialize(context);
 		final Map<String, MavenArtifact> webappDependencies = MavenArtifact.getWebappDependencies();
@@ -93,10 +121,13 @@ public class TestMavenArtifact {
 				assertNotNull("groupId", dependency.getGroupId());
 				assertNotNull("artifactId", dependency.getArtifactId());
 				assertNotNull("version", dependency.getVersion());
-				assertNotNull("name", dependency.getName());
-				assertNotNull("url", dependency.getUrl());
-				assertNotNull("licenseUrlsByName", dependency.getLicenseUrlsByName());
-				assertNotNull("allDependencies", dependency.getAllDependencies());
+				if ("jrobin".equals(dependency.getArtifactId())) {
+					assertNotNull("name", dependency.getName());
+					assertNotNull("url", dependency.getUrl());
+					assertNotNull("licenseUrlsByName", dependency.getLicenseUrlsByName());
+					assertNotNull("allDependencies", dependency.getAllDependencies());
+					assertNotNull("toString", dependency.toString());
+				}
 			}
 		}
 	}

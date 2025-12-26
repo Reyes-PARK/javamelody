@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -23,7 +23,6 @@ import java.security.CodeSource;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -58,13 +57,14 @@ import net.bull.javamelody.internal.web.MonitoringController;
  */
 class FilterContext {
 	private static final boolean MOJARRA_AVAILABLE = isMojarraAvailable();
+	private static final boolean JPA2_AVAILABLE = isJpa2Available();
 
 	private final String applicationType;
 	private final Collector collector;
 	private final Timer timer;
 	private final SamplingProfiler samplingProfiler;
 	private final TimerTask collectTimerTask;
-	private final Set<ObjectName> jmxNames = new HashSet<ObjectName>();
+	private final Set<ObjectName> jmxNames = new HashSet<>();
 
 	private static final class CollectTimerTask extends TimerTask {
 		private final Collector collector;
@@ -88,8 +88,8 @@ class FilterContext {
 		this.applicationType = applicationType;
 
 		boolean initOk = false;
-		this.timer = new Timer("javamelody"
-				+ Parameters.getContextPath(Parameters.getServletContext()).replace('/', ' '),
+		this.timer = new Timer(
+				"javamelody" + Parameters.getServletContext().getContextPath().replace('/', ' '),
 				true);
 		try {
 			logSystemInformationsAndParameters();
@@ -121,6 +121,9 @@ class FilterContext {
 
 			if (MOJARRA_AVAILABLE) {
 				JsfActionHelper.initJsfActionListener();
+			}
+			if (JPA2_AVAILABLE) {
+				JpaPersistence.initPersistenceProviderResolver();
 			}
 
 			this.samplingProfiler = initSamplingProfiler();
@@ -177,11 +180,11 @@ class FilterContext {
 		final List<Counter> counters;
 		if (JobInformations.QUARTZ_AVAILABLE) {
 			final Counter jobCounter = JobGlobalListener.getJobCounter();
-			counters = Arrays.asList(httpCounter, sqlCounter, jpaCounter, ejbCounter, springCounter,
+			counters = List.of(httpCounter, sqlCounter, jpaCounter, ejbCounter, springCounter,
 					guiceCounter, servicesCounter, strutsCounter, jsfCounter, jspCounter,
 					errorCounter, logCounter, jobCounter);
 		} else {
-			counters = Arrays.asList(httpCounter, sqlCounter, jpaCounter, ejbCounter, springCounter,
+			counters = List.of(httpCounter, sqlCounter, jpaCounter, ejbCounter, springCounter,
 					guiceCounter, servicesCounter, strutsCounter, jsfCounter, jspCounter,
 					errorCounter, logCounter);
 		}
@@ -224,13 +227,9 @@ class FilterContext {
 
 	private static void setDisplayedCounters(List<Counter> counters, String displayedCounters) {
 		for (final Counter counter : counters) {
-			if (counter.isJobCounter()) {
-				// le compteur "job" a toujours displayed=true s'il est présent,
-				// même s'il n'est pas dans la liste des "displayedCounters"
-				counter.setDisplayed(true);
-			} else {
-				counter.setDisplayed(false);
-			}
+			// le compteur "job" a toujours displayed=true s'il est présent,
+			// même s'il n'est pas dans la liste des "displayedCounters"
+			counter.setDisplayed(counter.isJobCounter());
 		}
 		if (!displayedCounters.isEmpty()) {
 			for (final String displayedCounter : displayedCounters.split(",")) {
@@ -323,11 +322,6 @@ class FilterContext {
 		// on branche le handler java.util.logging pour le counter de logs
 		LoggingHandler.getSingleton().register();
 
-		if (LOG.LOG4J_ENABLED) {
-			// si log4j est disponible on branche aussi l'appender pour le counter de logs
-			Log4JAppender.getSingleton().register();
-		}
-
 		if (LOG.LOG4J2_ENABLED) {
 			// si log4j2 est disponible on branche aussi l'appender pour le counter de logs
 			Log4J2Appender.getSingleton().register();
@@ -349,6 +343,15 @@ class FilterContext {
 		}
 	}
 
+	private static boolean isJpa2Available() {
+		try {
+			Class.forName("javax.persistence.spi.PersistenceProviderResolverHolder");
+			return true;
+		} catch (final Throwable e) { // NOPMD
+			return false;
+		}
+	}
+
 	private void logSystemInformationsAndParameters() {
 		// log les principales informations sur le système et sur les paramètres définis spécifiquement
 		LOG.debug("OS: " + System.getProperty("os.name") + ' '
@@ -357,7 +360,7 @@ class FilterContext {
 		LOG.debug("Java: " + System.getProperty("java.runtime.name") + ", "
 				+ System.getProperty("java.runtime.version"));
 		LOG.debug("Server: " + Parameters.getServletContext().getServerInfo());
-		LOG.debug("Webapp context: " + Parameters.getContextPath(Parameters.getServletContext()));
+		LOG.debug("Webapp context: " + Parameters.getServletContext().getContextPath());
 		LOG.debug("JavaMelody version: " + Parameters.JAVAMELODY_VERSION);
 		final String location = getJavaMelodyLocation();
 		if (location != null) {
@@ -370,7 +373,8 @@ class FilterContext {
 			final String value = parameter.getValue();
 			if (value != null && parameter != Parameter.ANALYTICS_ID) {
 				if (parameter == Parameter.AUTHORIZED_USERS) {
-					LOG.debug("parameter defined: " + parameter.getCode() + "=*****");
+					LOG.debug("parameter defined: " + Parameter.AUTHORIZED_USERS.getCode()
+							+ "=*****");
 				} else {
 					LOG.debug("parameter defined: " + parameter.getCode() + '=' + value);
 				}
@@ -402,9 +406,9 @@ class FilterContext {
 	private void initJmxExpose() {
 		final String packageName = getClass().getName().substring(0,
 				getClass().getName().length() - getClass().getSimpleName().length() - 1);
-		String webapp = Parameters.getContextPath(Parameters.getServletContext());
-		if (webapp.length() >= 1 && webapp.charAt(0) == '/') {
-			webapp = webapp.substring(1, webapp.length());
+		String webapp = Parameters.getServletContext().getContextPath();
+		if (!webapp.isEmpty() && webapp.charAt(0) == '/') {
+			webapp = webapp.substring(1);
 		}
 		final List<Counter> counters = collector.getCounters();
 		final MBeanServer platformMBeanServer = MBeans.getPlatformMBeanServer();
@@ -448,7 +452,7 @@ class FilterContext {
 
 				deregisterJdbcDriver();
 
-				// on enlève l'appender de logback, log4j et le handler de java.util.logging
+				// on enlève l'appender de logback, log4j2 et le handler de java.util.logging
 				deregisterLogs();
 
 				// on enlève le listener de jobs quartz
@@ -500,8 +504,8 @@ class FilterContext {
 		if (LOG.LOGBACK_ENABLED) {
 			LogbackAppender.getSingleton().deregister();
 		}
-		if (LOG.LOG4J_ENABLED) {
-			Log4JAppender.getSingleton().deregister();
+		if (LOG.LOG4J2_ENABLED) {
+			Log4J2Appender.getSingleton().deregister();
 		}
 		LoggingHandler.getSingleton().deregister();
 	}

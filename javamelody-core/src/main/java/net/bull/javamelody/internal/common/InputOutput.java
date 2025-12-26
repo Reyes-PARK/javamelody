@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -55,41 +55,39 @@ public final class InputOutput {
 	public static String pumpToString(InputStream input, Charset charset) throws IOException {
 		final ByteArrayOutputStream out = new ByteArrayOutputStream();
 		pump(input, out);
-		return out.toString(charset.name());
+		return out.toString(charset);
 	}
 
 	public static void pumpToFile(InputStream input, File file) throws IOException {
-		final OutputStream output = new FileOutputStream(file);
-		try {
+		try (OutputStream output = new FileOutputStream(file)) {
 			pump(input, output);
-		} finally {
-			output.close();
 		}
 	}
 
 	public static void pumpFromFile(File file, OutputStream output) throws IOException {
-		final FileInputStream in = new FileInputStream(file);
-		try {
+		try (FileInputStream in = new FileInputStream(file)) {
 			pump(in, output);
-		} finally {
-			in.close();
 		}
 	}
 
 	public static void zipFile(File source, File target) throws IOException {
 		final FileOutputStream fos = new FileOutputStream(target);
-		final ZipOutputStream zos = new ZipOutputStream(fos);
-		try {
+		try (ZipOutputStream zos = new ZipOutputStream(fos)) {
 			final ZipEntry ze = new ZipEntry(source.getName());
 			zos.putNextEntry(ze);
 			pumpFromFile(source, zos);
 			zos.closeEntry();
-		} finally {
-			zos.close();
 		}
 	}
 
 	public static boolean deleteFile(File file) {
 		return file.delete();
+	}
+
+	public static void copyFile(File source, File target) throws IOException {
+		try (FileInputStream in = new FileInputStream(source);
+				FileOutputStream out = new FileOutputStream(target)) {
+			pump(in, out);
+		}
 	}
 }

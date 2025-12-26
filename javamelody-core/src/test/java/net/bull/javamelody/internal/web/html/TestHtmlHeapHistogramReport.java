@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -75,12 +75,9 @@ public class TestHtmlHeapHistogramReport {
 	 * @throws IOException e */
 	@Test
 	public void testHeapHistoSun() throws IOException {
-		final InputStream input = getClass().getResourceAsStream("/heaphisto.txt");
-		try {
+		try (InputStream input = getClass().getResourceAsStream("/heaphisto.txt")) {
 			final HeapHistogram heapHistogram = new HeapHistogram(input, false);
 			report(heapHistogram);
-		} finally {
-			input.close();
 		}
 	}
 
@@ -88,12 +85,19 @@ public class TestHtmlHeapHistogramReport {
 	 * @throws IOException e */
 	@Test
 	public void testHeapHistoJdk9() throws IOException {
-		final InputStream input = getClass().getResourceAsStream("/heaphisto_jdk9.txt");
-		try {
+		try (InputStream input = getClass().getResourceAsStream("/heaphisto_jdk9.txt")) {
 			final HeapHistogram heapHistogram = new HeapHistogram(input, false);
 			report(heapHistogram);
-		} finally {
-			input.close();
+		}
+	}
+
+	/** Test.
+	 * @throws IOException e */
+	@Test
+	public void testHeapHistoJdkEa() throws IOException {
+		try (InputStream input = getClass().getResourceAsStream("/heaphisto_jdk-ea.txt")) {
+			final HeapHistogram heapHistogram = new HeapHistogram(input, false);
+			report(heapHistogram);
 		}
 	}
 
@@ -101,12 +105,9 @@ public class TestHtmlHeapHistogramReport {
 	 * @throws IOException e */
 	@Test
 	public void testHeapHistoBEA() throws IOException {
-		final InputStream input = getClass().getResourceAsStream("/heaphisto_jrockit.txt");
-		try {
+		try (InputStream input = getClass().getResourceAsStream("/heaphisto_jrockit.txt")) {
 			final HeapHistogram heapHistogram = new HeapHistogram(input, true);
 			report(heapHistogram);
-		} finally {
-			input.close();
 		}
 	}
 
@@ -154,12 +155,7 @@ public class TestHtmlHeapHistogramReport {
 		}
 		VirtualMachine.isJRockit();
 		// ces méthodes ne peuvent fonctionner dans maven et/ou junit
-		final Runnable runnable = new Runnable() {
-			@Override
-			public void run() {
-				virtualMachine();
-			}
-		};
+		final Runnable runnable = this::virtualMachine;
 
 		final Thread thread = new Thread(runnable, getClass().getSimpleName());
 		thread.setDaemon(true);

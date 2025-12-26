@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -19,8 +19,8 @@ package net.bull.javamelody.internal.web;
 
 import java.io.IOException;
 
-import javax.servlet.ServletOutputStream;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Implémentation de {@link FilterServletResponseWrapper} qui fonctionne avec le {@link CounterResponseStream},
@@ -39,9 +39,9 @@ public class CounterServletResponseWrapper extends FilterServletResponseWrapper 
 
 	/**
 	 * Retourne la taille en octets du flux écrit dans la réponse.
-	 * @return int
+	 * @return long
 	 */
-	public int getDataLength() {
+	public long getDataLength() {
 		return getCounterResponseStream() == null ? 0 : getCounterResponseStream().getDataLength();
 	}
 

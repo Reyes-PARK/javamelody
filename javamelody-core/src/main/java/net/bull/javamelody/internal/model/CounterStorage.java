@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -27,7 +27,6 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
@@ -35,6 +34,7 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 import net.bull.javamelody.Parameter;
+import net.bull.javamelody.internal.common.LOG;
 import net.bull.javamelody.internal.common.Parameters;
 
 /**
@@ -118,22 +118,16 @@ public class CounterStorage {
 	}
 
 	static int writeToFile(Counter counter, File file) throws IOException {
-		final FileOutputStream out = new FileOutputStream(file);
-		try {
+		try (FileOutputStream out = new FileOutputStream(file)) {
 			final CounterOutputStream counterOutput = new CounterOutputStream(
 					new GZIPOutputStream(new BufferedOutputStream(out)));
-			final ObjectOutputStream output = new ObjectOutputStream(counterOutput);
-			try {
+			try (ObjectOutputStream output = new ObjectOutputStream(counterOutput)) {
 				output.writeObject(counter);
-			} finally {
 				// ce close libère les ressources du ObjectOutputStream et du GZIPOutputStream
-				output.close();
 			}
 			// retourne la taille sérialisée non compressée,
 			// qui est une estimation pessimiste de l'occupation mémoire
 			return counterOutput.dataLength;
-		} finally {
-			out.close();
 		}
 	}
 
@@ -155,21 +149,20 @@ public class CounterStorage {
 	}
 
 	static Counter readFromFile(File file) throws IOException {
-		final FileInputStream in = new FileInputStream(file);
-		try {
-			final ObjectInputStream input = TransportFormat
-					.createObjectInputStream(new GZIPInputStream(new BufferedInputStream(in)));
-			try {
+		try (FileInputStream in = new FileInputStream(file)) {
+			try (ObjectInputStream input = TransportFormat
+					.createObjectInputStream(new GZIPInputStream(new BufferedInputStream(in)))) {
 				// on retourne l'instance du counter lue
 				return (Counter) input.readObject();
-			} finally {
 				// ce close libère les ressources du ObjectInputStream et du GZIPInputStream
-				input.close();
 			}
 		} catch (final ClassNotFoundException e) {
 			throw new IOException(e.getMessage(), e);
-		} finally {
-			in.close();
+		} catch (final IllegalStateException | ClassCastException e) {
+			LOG.warn("could not deserialize " + file.getName()
+					+ " , corrupted file will be deleted.", e);
+			file.delete();
+			return null;
 		}
 	}
 
@@ -230,7 +223,7 @@ public class CounterStorage {
 		if (files == null) {
 			return Collections.emptyList();
 		}
-		return Arrays.asList(files);
+		return List.of(files);
 	}
 
 	// cette méthode est utilisée dans l'ihm Swing

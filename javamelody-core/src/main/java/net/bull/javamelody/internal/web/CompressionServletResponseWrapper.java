@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -19,8 +19,8 @@ package net.bull.javamelody.internal.web;
 
 import java.io.IOException;
 
-import javax.servlet.ServletOutputStream;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Implémentation de {@link FilterServletResponseWrapper} qui fonctionne avec le {@link CompressionResponseStream}.

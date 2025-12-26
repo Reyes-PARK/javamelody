@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -40,17 +40,20 @@ final class MBeansAccessor {
 	private static final Set<String> OPERATING_SYSTEM_ATTRIBUTES = getAttributesNames(
 			OPERATING_SYSTEM);
 	private static final ObjectName THREADING = createObjectName("java.lang:type=Threading");
-	private static final boolean MBEAN_ALLOCATED_BYTES_ENABLED = getAttributesNames(THREADING)
-			.contains("ThreadAllocatedMemoryEnabled");
-	private static final String[] THREAD_ALLOCATED_BYTES_SIGNATURE = new String[] {
-			long.class.getName(), };
+	private static final boolean MBEAN_ALLOCATED_BYTES_ENABLED = isMbeanAllocatedBytesEnabled();
+	private static final String[] THREAD_ALLOCATED_BYTES_SIGNATURE = { long.class.getName(), };
 
 	private MBeansAccessor() {
 		super();
 	}
 
 	static Set<ObjectName> getTomcatThreadPools() {
-		return MBEAN_SERVER.queryNames(createObjectName("*:type=ThreadPool,*"), null);
+		final Set<ObjectName> result = new HashSet<>(
+				MBEAN_SERVER.queryNames(createObjectName("*:type=ThreadPool,*"), null));
+		// #843 Tomcat info is not available anymore
+		result.removeAll(MBEAN_SERVER.queryNames(
+				createObjectName("*:type=ThreadPool,*,subType=SocketProperties"), null));
+		return result;
 	}
 
 	static Set<ObjectName> getTomcatGlobalRequestProcessors() {
@@ -151,7 +154,7 @@ final class MBeansAccessor {
 
 	private static Set<String> getAttributesNames(ObjectName name) {
 		try {
-			final Set<String> result = new HashSet<String>();
+			final Set<String> result = new HashSet<>();
 			final MBeanInfo mBeanInfo = MBEAN_SERVER.getMBeanInfo(name);
 			final MBeanAttributeInfo[] attributes = mBeanInfo.getAttributes();
 			for (final MBeanAttributeInfo attribute : attributes) {
@@ -163,5 +166,19 @@ final class MBeansAccessor {
 		} catch (final JMException e) {
 			return Collections.emptySet();
 		}
+	}
+
+	private static boolean isMbeanAllocatedBytesEnabled() {
+		if (getAttributesNames(THREADING).contains("ThreadAllocatedMemoryEnabled")) {
+			try {
+				final boolean supported = getAttribute(THREADING, "ThreadAllocatedMemorySupported");
+				if (supported) {
+					return getAttribute(THREADING, "ThreadAllocatedMemoryEnabled");
+				}
+			} catch (final JMException ex) {
+				throw new IllegalStateException(ex);
+			}
+		}
+		return false;
 	}
 }

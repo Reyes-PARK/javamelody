@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -28,8 +28,7 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
-import javax.servlet.http.HttpServletRequest;
-
+import jakarta.servlet.http.HttpServletRequest;
 import net.bull.javamelody.internal.common.HttpParameter;
 import net.bull.javamelody.internal.common.HttpPart;
 
@@ -39,7 +38,7 @@ import net.bull.javamelody.internal.common.HttpPart;
  * @author Emeric Vernat
  */
 class RequestToMethodMapper<T> {
-	private final Map<HttpPart, Method> methodsByPart = new HashMap<HttpPart, Method>();
+	private final Map<HttpPart, Method> methodsByPart = new HashMap<>();
 
 	@Target(ElementType.METHOD)
 	@Retention(RetentionPolicy.RUNTIME)

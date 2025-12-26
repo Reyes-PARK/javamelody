@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -18,7 +18,6 @@
 package net.bull.javamelody.internal.web.html;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,7 @@ final class JavaHTMLizer {
 	private static final String BR = "<br />\n";
 
 	private static final List<Pattern> RESERVED_WORDS_PATTERNS = createReservedWordPatterns(
-			Arrays.asList("class", "finally", "return", "new", "public", "static", "final", "void",
+			List.of("class", "finally", "return", "new", "public", "static", "final", "void",
 					"synchronized", "interface", "enum", "private", "protected", "import",
 					"package", "try", "catch", "for", "while", "do", "if", "else", "switch", "case",
 					"default", "goto", "byte", "short", "int", "long", "float", "double", "char",
@@ -42,10 +41,10 @@ final class JavaHTMLizer {
 
 	private static final Map<Character, String> ESCAPE_MAPS = createEscapeMaps();
 
-	private static final Pattern MULTILINE_COMMENT_PATTERN = Pattern.compile("\\/\\*(.*?)\\*\\/",
+	private static final Pattern MULTILINE_COMMENT_PATTERN = Pattern.compile("/\\*(.*?)\\*/",
 			Pattern.DOTALL);
 
-	private static final Pattern SINGLELINE_COMMENT_PATTERN = Pattern.compile("\\/\\/(.*?)<br \\/>",
+	private static final Pattern SINGLELINE_COMMENT_PATTERN = Pattern.compile("//(.*?)<br />",
 			Pattern.DOTALL);
 
 	private static final Pattern STRING_PATTERN = Pattern.compile("&quot;(.*?)&quot;");
@@ -97,7 +96,7 @@ final class JavaHTMLizer {
 	}
 
 	private static List<Pattern> createReservedWordPatterns(final List<String> reservedWords) {
-		final List<Pattern> result = new ArrayList<Pattern>(reservedWords.size());
+		final List<Pattern> result = new ArrayList<>(reservedWords.size());
 		for (final String reservedWord : reservedWords) {
 			result.add(Pattern.compile("(\\W)(" + reservedWord + ")(\\W)"));
 		}
@@ -105,7 +104,7 @@ final class JavaHTMLizer {
 	}
 
 	private static Map<Character, String> createEscapeMaps() {
-		final Map<Character, String> escapeMaps = new LinkedHashMap<Character, String>();
+		final Map<Character, String> escapeMaps = new LinkedHashMap<>();
 		escapeMaps.put(' ', "&nbsp;");
 		escapeMaps.put('\t', "&nbsp;&nbsp;&nbsp;&nbsp;");
 		escapeMaps.put('<', "&lt;");
@@ -118,11 +117,7 @@ final class JavaHTMLizer {
 	}
 
 	private static String escapeChar(final char c) {
-		final String escaped = ESCAPE_MAPS.get(Character.valueOf(c));
-		if (escaped != null) {
-			return escaped;
-		}
-		return null;
+		return ESCAPE_MAPS.get(c);
 	}
 
 	private static String htmlEscape(final String text) {

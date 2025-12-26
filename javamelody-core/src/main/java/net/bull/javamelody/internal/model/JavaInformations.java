@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -34,14 +34,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import javax.servlet.ServletContext;
 import javax.sql.DataSource;
 
+import jakarta.servlet.ServletContext;
 import net.bull.javamelody.JdbcWrapper;
 import net.bull.javamelody.SessionListener;
 import net.bull.javamelody.SpringContext;
 import net.bull.javamelody.internal.common.Parameters;
-import net.bull.javamelody.internal.model.HsErrPid.HsErrPidComparator;
 
 /**
  * Informations systèmes sur le serveur, sans code html de présentation.
@@ -53,11 +52,22 @@ import net.bull.javamelody.internal.model.HsErrPid.HsErrPidComparator;
  */
 public class JavaInformations implements Serializable { // NOPMD
 	public static final double HIGH_USAGE_THRESHOLD_IN_PERCENTS = 95d;
+
 	private static final long serialVersionUID = 3281861236369720876L;
 	private static final Date START_DATE = new Date();
 	private static final boolean SPRING_AVAILABLE = isSpringAvailable();
 	private static boolean localWebXmlExists = true; // true par défaut
 	private static boolean localPomXmlExists = true; // true par défaut
+
+	private static final Comparator<ThreadInformations> THREAD_INFORMATIONS_COMPARATOR = Comparator
+			.comparing(ThreadInformations::getName, String.CASE_INSENSITIVE_ORDER);
+	private static final Comparator<CacheInformations> CACHE_INFORMATIONS_COMPARATOR = Comparator
+			.comparing(CacheInformations::getName, String.CASE_INSENSITIVE_ORDER);
+	private static final Comparator<JCacheInformations> JCACHE_INFORMATIONS_COMPARATOR = Comparator
+			.comparing(JCacheInformations::getName, String.CASE_INSENSITIVE_ORDER);
+	private static final Comparator<JobInformations> JOB_INFORMATIONS_COMPARATOR = Comparator
+			.comparing(JobInformations::getName, String.CASE_INSENSITIVE_ORDER);
+
 	private final MemoryInformations memoryInformations;
 	@SuppressWarnings("all")
 	private final List<TomcatInformations> tomcatInformationsList;
@@ -86,6 +96,7 @@ public class JavaInformations implements Serializable { // NOPMD
 	private final Date startDate;
 	private final String jvmArguments;
 	private final long freeDiskSpaceInTemp;
+	private final long usableDiskSpaceInTemp;
 	private final int threadCount;
 	private final int peakThreadCount;
 	private final long totalStartedThreadCount;
@@ -96,45 +107,14 @@ public class JavaInformations implements Serializable { // NOPMD
 	@SuppressWarnings("all")
 	private final List<CacheInformations> cacheInformationsList;
 	@SuppressWarnings("all")
+	private final List<JCacheInformations> jcacheInformationsList;
+	@SuppressWarnings("all")
 	private final List<JobInformations> jobInformationsList;
 	@SuppressWarnings("all")
 	private final List<HsErrPid> hsErrPidList;
 	private final boolean webXmlExists = localWebXmlExists;
 	private final boolean pomXmlExists = localPomXmlExists;
 	private final boolean springBeanExists;
-
-	static final class ThreadInformationsComparator
-			implements Comparator<ThreadInformations>, Serializable {
-		private static final long serialVersionUID = 1L;
-
-		/** {@inheritDoc} */
-		@Override
-		public int compare(ThreadInformations thread1, ThreadInformations thread2) {
-			return thread1.getName().compareToIgnoreCase(thread2.getName());
-		}
-	}
-
-	static final class CacheInformationsComparator
-			implements Comparator<CacheInformations>, Serializable {
-		private static final long serialVersionUID = 1L;
-
-		/** {@inheritDoc} */
-		@Override
-		public int compare(CacheInformations cache1, CacheInformations cache2) {
-			return cache1.getName().compareToIgnoreCase(cache2.getName());
-		}
-	}
-
-	static final class JobInformationsComparator
-			implements Comparator<JobInformations>, Serializable {
-		private static final long serialVersionUID = 1L;
-
-		/** {@inheritDoc} */
-		@Override
-		public int compare(JobInformations job1, JobInformations job2) {
-			return job1.getName().compareToIgnoreCase(job2.getName());
-		}
-	}
 
 	// CHECKSTYLE:OFF
 	public JavaInformations(ServletContext servletContext, boolean includeDetails) {
@@ -168,7 +148,7 @@ public class JavaInformations implements Serializable { // NOPMD
 			webappVersion = null;
 		} else {
 			serverInfo = servletContext.getServerInfo();
-			contextPath = Parameters.getContextPath(servletContext);
+			contextPath = servletContext.getContextPath();
 			contextDisplayName = servletContext.getServletContextName();
 			webappVersion = MavenArtifact.getWebappVersion();
 		}
@@ -179,6 +159,7 @@ public class JavaInformations implements Serializable { // NOPMD
 		peakThreadCount = threadBean.getPeakThreadCount();
 		totalStartedThreadCount = threadBean.getTotalStartedThreadCount();
 		freeDiskSpaceInTemp = Parameters.TEMPORARY_DIRECTORY.getFreeSpace();
+		usableDiskSpaceInTemp = Parameters.TEMPORARY_DIRECTORY.getUsableSpace();
 		springBeanExists = SPRING_AVAILABLE && SpringContext.getSingleton() != null;
 
 		if (includeDetails) {
@@ -186,6 +167,7 @@ public class JavaInformations implements Serializable { // NOPMD
 			dataSourceDetails = buildDataSourceDetails();
 			threadInformationsList = buildThreadInformationsList();
 			cacheInformationsList = CacheInformations.buildCacheInformationsList();
+			jcacheInformationsList = JCacheInformations.buildJCacheInformationsList();
 			jobInformationsList = JobInformations.buildJobInformationsList();
 			hsErrPidList = HsErrPid.buildHsErrPidList();
 			pid = PID.getPID();
@@ -194,6 +176,7 @@ public class JavaInformations implements Serializable { // NOPMD
 			dataSourceDetails = null;
 			threadInformationsList = null;
 			cacheInformationsList = null;
+			jcacheInformationsList = null;
 			jobInformationsList = null;
 			hsErrPidList = null;
 			pid = null;
@@ -308,7 +291,7 @@ public class JavaInformations implements Serializable { // NOPMD
 	public static List<ThreadInformations> buildThreadInformationsList() {
 		final ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
 		final Map<Thread, StackTraceElement[]> stackTraces = Thread.getAllStackTraces();
-		final List<Thread> threads = new ArrayList<Thread>(stackTraces.keySet());
+		final List<Thread> threads = new ArrayList<>(stackTraces.keySet());
 
 		// si "1.6.0_01".compareTo(Parameters.JAVA_VERSION) > 0;
 		// on récupèrait les threads sans stack trace en contournant bug 6434648 avant 1.6.0_01
@@ -321,14 +304,13 @@ public class JavaInformations implements Serializable { // NOPMD
 		final boolean cpuTimeEnabled = threadBean.isThreadCpuTimeSupported()
 				&& threadBean.isThreadCpuTimeEnabled();
 		final long[] deadlockedThreads = getDeadlockedThreads(threadBean);
-		final List<ThreadInformations> threadInfosList = new ArrayList<ThreadInformations>(
-				threads.size());
+		final List<ThreadInformations> threadInfosList = new ArrayList<>(threads.size());
 		// hostAddress récupéré ici car il peut y avoir plus de 20000 threads
 		final String hostAddress = Parameters.getHostAddress();
 		for (final Thread thread : threads) {
 			final StackTraceElement[] stackTraceElements = stackTraces.get(thread);
 			final List<StackTraceElement> stackTraceElementList = stackTraceElements == null ? null
-					: new ArrayList<StackTraceElement>(Arrays.asList(stackTraceElements));
+					: new ArrayList<>(List.of(stackTraceElements));
 			final long cpuTimeMillis;
 			final long userTimeMillis;
 			if (cpuTimeEnabled) {
@@ -355,7 +337,14 @@ public class JavaInformations implements Serializable { // NOPMD
 		}
 		final Thread[] threadsArray = new Thread[group.activeCount()];
 		group.enumerate(threadsArray, true);
-		return Arrays.asList(threadsArray);
+		final List<Thread> threads = new ArrayList<>(threadsArray.length);
+		for (final Thread thread : threadsArray) {
+			// threadsArray may contain null if a thread has just died between activeCount and enumerate
+			if (thread != null) {
+				threads.add(thread);
+			}
+		}
+		return threads;
 	}
 
 	private static long[] getDeadlockedThreads(ThreadMXBean threadBean) {
@@ -380,14 +369,11 @@ public class JavaInformations implements Serializable { // NOPMD
 			// on commence par voir si le driver jdbc a été utilisé
 			// car s'il n'y a pas de datasource une exception est déclenchée
 			if (Parameters.getLastConnectUrl() != null) {
-				final Connection connection = DriverManager.getConnection(
-						Parameters.getLastConnectUrl(), Parameters.getLastConnectInfo());
-				connection.setAutoCommit(false);
-				try {
+				try (final Connection connection = DriverManager.getConnection(
+						Parameters.getLastConnectUrl(), Parameters.getLastConnectInfo())) {
+					connection.setAutoCommit(false);
 					appendDataBaseVersion(result, connection);
-				} finally {
 					// rollback inutile ici car on ne fait que lire les meta-data (+ cf issue 38)
-					connection.close();
 				}
 			}
 
@@ -397,23 +383,20 @@ public class JavaInformations implements Serializable { // NOPMD
 			for (final Map.Entry<String, DataSource> entry : dataSources.entrySet()) {
 				final String name = entry.getKey();
 				final DataSource dataSource = entry.getValue();
-				final Connection connection = dataSource.getConnection();
 				// on ne doit pas changer autoCommit pour la connection d'une DataSource
 				// (ou alors il faudrait remettre l'autoCommit après, issue 233)
 				// connection.setAutoCommit(false);
-				try {
+				try (Connection connection = dataSource.getConnection()) {
 					if (result.length() > 0) {
 						result.append("\n\n");
 					}
 					result.append(name).append(":\n");
 					appendDataBaseVersion(result, connection);
-				} finally {
 					// rollback inutile ici car on ne fait que lire les meta-data (+ cf issue 38)
-					connection.close();
 				}
 			}
 		} catch (final Exception e) {
-			result.append(e.toString());
+			result.append(e);
 		}
 		if (result.length() > 0) {
 			return result.toString();
@@ -425,7 +408,13 @@ public class JavaInformations implements Serializable { // NOPMD
 			throws SQLException {
 		final DatabaseMetaData metaData = connection.getMetaData();
 		// Sécurité: pour l'instant on n'indique pas metaData.getUserName()
-		result.append(metaData.getURL()).append('\n');
+		final String url = metaData.getURL();
+		if (url != null) {
+			// no application puts a password in clear text in a URL
+			// since all the docs show with separate properties and it would be a fault in itself,
+			// but just in case
+			result.append(url.replaceAll("(?<=password=).*", "\\$")).append('\n');
+		}
 		result.append(metaData.getDatabaseProductName()).append(", ")
 				.append(metaData.getDatabaseProductVersion()).append('\n');
 		result.append("Driver JDBC:\n").append(metaData.getDriverName()).append(", ")
@@ -589,6 +578,10 @@ public class JavaInformations implements Serializable { // NOPMD
 		return freeDiskSpaceInTemp;
 	}
 
+	public long getUsableDiskSpaceInTemp() {
+		return usableDiskSpaceInTemp;
+	}
+
 	public int getThreadCount() {
 		return threadCount;
 	}
@@ -611,24 +604,29 @@ public class JavaInformations implements Serializable { // NOPMD
 
 	public List<ThreadInformations> getThreadInformationsList() {
 		// on trie sur demande (si affichage)
-		final List<ThreadInformations> result = new ArrayList<ThreadInformations>(
-				threadInformationsList);
-		Collections.sort(result, new ThreadInformationsComparator());
+		final List<ThreadInformations> result = new ArrayList<>(threadInformationsList);
+		result.sort(THREAD_INFORMATIONS_COMPARATOR);
 		return Collections.unmodifiableList(result);
 	}
 
 	public List<CacheInformations> getCacheInformationsList() {
 		// on trie sur demande (si affichage)
-		final List<CacheInformations> result = new ArrayList<CacheInformations>(
-				cacheInformationsList);
-		Collections.sort(result, new CacheInformationsComparator());
+		final List<CacheInformations> result = new ArrayList<>(cacheInformationsList);
+		result.sort(CACHE_INFORMATIONS_COMPARATOR);
+		return Collections.unmodifiableList(result);
+	}
+
+	public List<JCacheInformations> getJCacheInformationsList() {
+		// on trie sur demande (si affichage)
+		final List<JCacheInformations> result = new ArrayList<>(jcacheInformationsList);
+		result.sort(JCACHE_INFORMATIONS_COMPARATOR);
 		return Collections.unmodifiableList(result);
 	}
 
 	public List<JobInformations> getJobInformationsList() {
 		// on trie sur demande (si affichage)
-		final List<JobInformations> result = new ArrayList<JobInformations>(jobInformationsList);
-		Collections.sort(result, new JobInformationsComparator());
+		final List<JobInformations> result = new ArrayList<>(jobInformationsList);
+		result.sort(JOB_INFORMATIONS_COMPARATOR);
 		return Collections.unmodifiableList(result);
 	}
 
@@ -645,8 +643,8 @@ public class JavaInformations implements Serializable { // NOPMD
 	public List<HsErrPid> getHsErrPidList() {
 		if (hsErrPidList != null) {
 			// on trie sur demande (si affichage)
-			final List<HsErrPid> result = new ArrayList<HsErrPid>(hsErrPidList);
-			Collections.sort(result, new HsErrPidComparator());
+			final List<HsErrPid> result = new ArrayList<>(hsErrPidList);
+			result.sort(HsErrPid.HS_ERR_PID_COMPARATOR);
 			return Collections.unmodifiableList(result);
 		}
 		return null;
@@ -664,6 +662,10 @@ public class JavaInformations implements Serializable { // NOPMD
 
 	public boolean isCacheEnabled() {
 		return cacheInformationsList != null && !cacheInformationsList.isEmpty();
+	}
+
+	public boolean isJCacheEnabled() {
+		return jcacheInformationsList != null && !jcacheInformationsList.isEmpty();
 	}
 
 	public boolean isJobEnabled() {

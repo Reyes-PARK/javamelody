@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -20,7 +20,7 @@ package net.bull.javamelody.internal.model;
 import java.io.Serializable;
 import java.util.Date;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * Objet correspondant à une erreur dans filtre http ou dans logs à un instant t, avec son message, sa stackTrace
@@ -31,7 +31,7 @@ public class CounterError implements Serializable {
 	public static final String REQUEST_KEY = "javamelody.request";
 	private static final long serialVersionUID = 5690702786722045646L;
 	@SuppressWarnings("all")
-	private static final ThreadLocal<HttpServletRequest> HTTP_SERVLET_REQUEST_CONTEXT = new ThreadLocal<HttpServletRequest>();
+	private static final ThreadLocal<HttpServletRequest> HTTP_SERVLET_REQUEST_CONTEXT = new ThreadLocal<>();
 
 	/**
 	 * Max size of error message.

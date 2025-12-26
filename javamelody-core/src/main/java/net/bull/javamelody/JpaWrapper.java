@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -20,10 +20,9 @@ package net.bull.javamelody;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 
-import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
-import javax.persistence.Query;
-
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Query;
 import net.bull.javamelody.internal.model.Counter;
 
 /**

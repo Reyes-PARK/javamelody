@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -22,15 +22,15 @@ import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
 import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.io.IOException;
 import java.net.URL;
 
-import javax.servlet.ServletContext;
-
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletContext;
 import net.bull.javamelody.Utils;
 import net.bull.javamelody.internal.common.Parameters;
 
@@ -51,8 +51,8 @@ public class TestRemoteCall {
 	public void testCollect() throws IOException {
 		Utils.setProperty(Parameters.PARAMETER_SYSTEM_PREFIX + "mockLabradorRetriever", "true");
 		final ServletContext context = createNiceMock(ServletContext.class);
-		expect(context.getMajorVersion()).andReturn(2).anyTimes();
-		expect(context.getMinorVersion()).andReturn(5).anyTimes();
+		expect(context.getMajorVersion()).andReturn(5).anyTimes();
+		expect(context.getMinorVersion()).andReturn(0).anyTimes();
 		expect(context.getServletContextName()).andReturn("test webapp").anyTimes();
 		expect(context.getServerInfo()).andReturn("mockJetty").anyTimes();
 		expect(context.getContextPath()).andReturn("/test").anyTimes();
@@ -63,7 +63,9 @@ public class TestRemoteCall {
 		remoteCall.collectJavaInformations();
 		remoteCall.collectGraphLastValue("cpu");
 		remoteCall.collectMBeanAttribute("java.lang:type=OperatingSystem.ProcessCpuTime");
+		remoteCall.executeActionAndCollectData(Action.GC, null, null, null, null, null);
 		assertEquals("getURL", new RemoteCall(new URL(url)).getURL().toString(), url);
 		verify(context);
+		assertNotNull("", new RemoteCall("http://dummy?p=1"));
 	}
 }

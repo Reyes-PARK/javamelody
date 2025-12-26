@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -28,14 +28,14 @@ import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
 
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletContext;
-
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletContext;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.internal.model.TransportFormat;
 
@@ -58,6 +58,7 @@ public final class Parameters {
 	private static final String COLLECTOR_APPLICATIONS_FILENAME = "applications.properties";
 	private static final boolean PDF_ENABLED = computePdfEnabled();
 	private static Map<String, List<URL>> urlsByApplications;
+	private static Map<String, List<String>> applicationsByAggregationApplications;
 
 	private static FilterConfig filterConfig;
 	private static ServletContext servletContext;
@@ -78,18 +79,14 @@ public final class Parameters {
 	}
 
 	public static void initialize(ServletContext context) {
-		if ("1.6".compareTo(JAVA_VERSION) > 0) {
-			throw new IllegalStateException(
-					"La version java doit être 1.6 au minimum et non " + JAVA_VERSION);
-		}
 		servletContext = context;
 
 		dnsLookupsDisabled = Parameter.DNS_LOOKUPS_DISABLED.getValueAsBoolean();
 	}
 
 	public static void initJdbcDriverParameters(String connectUrl, Properties connectInfo) {
-		Parameters.lastConnectUrl = connectUrl;
-		Parameters.lastConnectInfo = connectInfo;
+		lastConnectUrl = connectUrl;
+		lastConnectInfo = connectInfo;
 	}
 
 	/**
@@ -119,6 +116,14 @@ public final class Parameters {
 		return Collections.unmodifiableMap(urlsByApplications);
 	}
 
+	public static Map<String, List<String>> getApplicationsByAggregationApplication()
+			throws IOException {
+		if (applicationsByAggregationApplications == null) {
+			readCollectorApplications();
+		}
+		return Collections.unmodifiableMap(applicationsByAggregationApplications);
+	}
+
 	public static void addCollectorApplication(String application, List<URL> urls)
 			throws IOException {
 		assert application != null;
@@ -130,28 +135,65 @@ public final class Parameters {
 		writeCollectorApplications();
 	}
 
+	public static void addCollectorAggregationApplication(String aggregationApplication,
+			List<String> aggregatedApplications) throws IOException {
+		assert aggregationApplication != null;
+		assert aggregatedApplications != null && !aggregatedApplications.isEmpty();
+		// initialisation si besoin
+		getCollectorUrlsByApplications();
+
+		applicationsByAggregationApplications.put(aggregationApplication, aggregatedApplications);
+		writeCollectorApplications();
+	}
+
 	public static void removeCollectorApplication(String application) throws IOException {
 		assert application != null;
 		// initialisation si besoin
 		getCollectorUrlsByApplications();
 
-		urlsByApplications.remove(application);
+		if (urlsByApplications.containsKey(application)) {
+			urlsByApplications.remove(application);
+		} else {
+			applicationsByAggregationApplications.remove(application);
+		}
+		synchronizeAggregationApplications();
 		writeCollectorApplications();
 	}
 
 	private static void writeCollectorApplications() throws IOException {
 		final Properties properties = new Properties();
-		final String monitoringPath = getMonitoringPath();
+		final String dummyUrl = "http://localhost";
+		final String urlSuffix = parseUrls(dummyUrl).get(0).toString().substring(dummyUrl.length());
 		for (final Map.Entry<String, List<URL>> entry : urlsByApplications.entrySet()) {
 			final List<URL> urls = entry.getValue();
 			assert urls != null && !urls.isEmpty();
 			final StringBuilder sb = new StringBuilder();
 			for (final URL url : urls) {
 				final String urlString = url.toString();
-				// on enlève le suffixe ajouté précédemment dans parseUrl
-				final String webappUrl = urlString.substring(0,
-						urlString.lastIndexOf(monitoringPath));
+				// on enlève le suffixe ajouté précédemment dans parseUrls
+				String webappUrl = urlString.substring(0, urlString.lastIndexOf(urlSuffix));
+				if (webappUrl.length() + urlSuffix.length() < urlString.length()) {
+					// on remet l'éventuel queryString comme avant parseUrls
+					webappUrl += "?"
+							+ urlString.substring(webappUrl.length() + urlSuffix.length() + 1);
+				}
+				if (webappUrl.indexOf(',') != -1) {
+					throw new IOException("The URL should not contain a comma.");
+				}
 				sb.append(webappUrl).append(',');
+			}
+			sb.delete(sb.length() - 1, sb.length());
+			properties.put(entry.getKey(), sb.toString());
+		}
+		for (final Map.Entry<String, List<String>> entry : applicationsByAggregationApplications
+				.entrySet()) {
+			final List<String> applications = entry.getValue();
+			final StringBuilder sb = new StringBuilder();
+			for (final String application : applications) {
+				if (application.indexOf(',') != -1) {
+					throw new IOException("The application name should not contain a comma.");
+				}
+				sb.append(application).append(',');
 			}
 			sb.delete(sb.length() - 1, sb.length());
 			properties.put(entry.getKey(), sb.toString());
@@ -161,45 +203,66 @@ public final class Parameters {
 		if (!directory.mkdirs() && !directory.exists()) {
 			throw new IOException("JavaMelody directory can't be created: " + directory.getPath());
 		}
-		final FileOutputStream output = new FileOutputStream(collectorApplicationsFile);
-		try {
+		try (FileOutputStream output = new FileOutputStream(collectorApplicationsFile)) {
 			properties.store(output, "urls of the applications to monitor");
-		} finally {
-			output.close();
 		}
 	}
 
 	private static void readCollectorApplications() throws IOException {
 		// le fichier applications.properties contient les noms et les urls des applications à monitorer
 		// par ex.: recette=http://recette1:8080/myapp
+		// ou recette2=http://recette2:8080/myapp
 		// ou production=http://prod1:8080/myapp,http://prod2:8080/myapp
+		// ou aggregation=recette,recette2
 		// Dans une instance de Properties, les propriétés ne sont pas ordonnées,
 		// mais elles seront ordonnées lorsqu'elles seront mises dans cette TreeMap
-		final Map<String, List<URL>> result = new TreeMap<String, List<URL>>();
+		final Map<String, List<URL>> applications = new TreeMap<>();
+		final Map<String, List<String>> aggregationApplications = new TreeMap<>();
 		final File file = getCollectorApplicationsFile();
 		if (file.exists()) {
 			final Properties properties = new Properties();
-			final FileInputStream input = new FileInputStream(file);
-			try {
+			try (FileInputStream input = new FileInputStream(file)) {
 				properties.load(input);
-			} finally {
-				input.close();
 			}
 			@SuppressWarnings("unchecked")
 			final List<String> propertyNames = (List<String>) Collections
 					.list(properties.propertyNames());
 			for (final String property : propertyNames) {
-				result.put(property, parseUrl(String.valueOf(properties.get(property))));
+				final String value = String.valueOf(properties.get(property));
+				if (value.startsWith("http")) {
+					applications.put(property, parseUrls(value));
+				} else {
+					aggregationApplications.put(property,
+							new ArrayList<>(List.of(value.split(","))));
+				}
 			}
 		}
-		urlsByApplications = result;
+		urlsByApplications = applications;
+		applicationsByAggregationApplications = aggregationApplications;
+
+		synchronizeAggregationApplications();
+	}
+
+	private static void synchronizeAggregationApplications() {
+		for (final Iterator<List<String>> it1 = applicationsByAggregationApplications.values()
+				.iterator(); it1.hasNext();) {
+			final List<String> aggregatedApplications = it1.next();
+			// on supprime les applications aggrégées inconnues
+			aggregatedApplications.removeIf(aggregatedApplication -> !urlsByApplications
+					.containsKey(aggregatedApplication)
+					&& !applicationsByAggregationApplications.containsKey(aggregatedApplication));
+			if (aggregatedApplications.isEmpty()) {
+				// application d'aggrégation vide, on la supprime
+				it1.remove();
+			}
+		}
 	}
 
 	public static File getCollectorApplicationsFile() {
 		return new File(getStorageDirectory(""), COLLECTOR_APPLICATIONS_FILENAME);
 	}
 
-	public static List<URL> parseUrl(String value) throws MalformedURLException {
+	public static List<URL> parseUrls(String value) throws MalformedURLException {
 		// pour un cluster, le paramètre vaut "url1,url2"
 		final TransportFormat transportFormat;
 		if (Parameter.TRANSPORT_FORMAT.getValue() == null) {
@@ -212,13 +275,21 @@ public final class Parameters {
 				+ transportFormat.getCode();
 
 		final String[] urlsArray = value.split(",");
-		final List<URL> urls = new ArrayList<URL>(urlsArray.length);
+		final List<URL> urls = new ArrayList<>(urlsArray.length);
 		for (final String s : urlsArray) {
 			String s2 = s.trim();
+			final String queryString;
+			if (s2.indexOf('?') != -1) {
+				// queryString is not url encoded here to create URL. URL encode it before if needed.
+				queryString = s2.substring(s2.indexOf('?') + 1);
+				s2 = s2.substring(0, s2.indexOf('?'));
+			} else {
+				queryString = null;
+			}
 			while (s2.endsWith("/")) {
 				s2 = s2.substring(0, s2.length() - 1);
 			}
-			final URL url = new URL(s2 + suffix);
+			final URL url = new URL(s2 + suffix + (queryString == null ? "" : "&" + queryString));
 			urls.add(url);
 		}
 		return urls;
@@ -381,43 +452,9 @@ public final class Parameters {
 			// ayant pour nom le contexte de la webapp et le nom du serveur
 			// pour pouvoir monitorer plusieurs webapps sur le même serveur et
 			// pour pouvoir stocker sur un répertoire partagé entre plusieurs serveurs
-			return getContextPath(servletContext) + '_' + getHostName();
+			return servletContext.getContextPath() + '_' + getHostName();
 		}
 		return null;
-	}
-
-	public static String getContextPath(ServletContext context) {
-		// cette méthode retourne le contextPath de la webapp
-		// en utilisant ServletContext.getContextPath si servlet api 2.5
-		// ou en se débrouillant sinon
-		// (on n'a pas encore pour l'instant de request pour appeler HttpServletRequest.getContextPath)
-		if (context.getMajorVersion() == 2 && context.getMinorVersion() >= 5
-				|| context.getMajorVersion() > 2) {
-			// api servlet 2.5 (Java EE 5) minimum pour appeler ServletContext.getContextPath
-			return context.getContextPath();
-		}
-		final URL webXmlUrl;
-		try {
-			webXmlUrl = context.getResource("/WEB-INF/web.xml");
-		} catch (final MalformedURLException e) {
-			throw new IllegalStateException(e);
-		}
-		String contextPath = webXmlUrl.toExternalForm();
-		contextPath = contextPath.substring(0, contextPath.indexOf("/WEB-INF/web.xml"));
-		final int indexOfWar = contextPath.indexOf(".war");
-		if (indexOfWar > 0) {
-			contextPath = contextPath.substring(0, indexOfWar);
-		}
-		// tomcat peut renvoyer une url commençant pas "jndi:/localhost"
-		// (v5.5.28, webapp dans un répertoire)
-		if (contextPath.startsWith("jndi:/localhost")) {
-			contextPath = contextPath.substring("jndi:/localhost".length());
-		}
-		final int lastIndexOfSlash = contextPath.lastIndexOf('/');
-		if (lastIndexOfSlash != -1) {
-			contextPath = contextPath.substring(lastIndexOfSlash);
-		}
-		return contextPath;
 	}
 
 	private static String getJavaMelodyVersion() {
@@ -429,11 +466,9 @@ public final class Parameters {
 
 		final Properties properties = new Properties();
 		try {
-			try {
+			try (inputStream) {
 				properties.load(inputStream);
 				return properties.getProperty("version");
-			} finally {
-				inputStream.close();
 			}
 		} catch (final IOException e) {
 			return e.toString();
@@ -474,10 +509,7 @@ public final class Parameters {
 			}
 		}
 		if (filterConfig != null) {
-			result = filterConfig.getInitParameter(parameterName);
-			if (result != null) {
-				return result;
-			}
+			return filterConfig.getInitParameter(parameterName);
 		}
 		return null;
 	}

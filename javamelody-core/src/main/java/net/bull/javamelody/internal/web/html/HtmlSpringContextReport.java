@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -65,18 +65,17 @@ public class HtmlSpringContextReport extends HtmlAbstractReport {
 
 	private void writeBackLink() throws IOException {
 		writeln("<div class='noPrint'>");
-		writeln("<a href='javascript:history.back()'>");
-		writeln("<img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
+		writeln("<a class='back' href=''><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
 		writeln("</div>");
 	}
 
 	private void writeBean(String beanName, Class<?> beanClass, String beanToString)
 			throws IOException {
-		write("<td>");
+		write("<td class='wrappedText'>");
 		writeDirectly(htmlEncodeButNotSpace(beanName));
-		write("</td><td>");
+		write("</td><td class='wrappedText'>");
 		writeDirectly(HtmlSourceReport.addLinkToClassName(beanClass.getName()));
-		write("</td><td>");
+		write("</td><td class='wrappedText'>");
 		writeDirectly(htmlEncodeButNotSpace(beanToString));
 		write("</td>");
 	}

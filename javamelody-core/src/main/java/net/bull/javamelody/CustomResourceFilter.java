@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -23,14 +23,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletResponse;
-
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.internal.web.MonitoringController;
 
 /**
@@ -62,7 +61,7 @@ import net.bull.javamelody.internal.web.MonitoringController;
  * @author Emeric Vernat
  */
 public class CustomResourceFilter implements Filter {
-	private final Map<String, String> customResources = new HashMap<String, String>();
+	private final Map<String, String> customResources = new HashMap<>();
 
 	/** {@inheritDoc} */
 	@Override

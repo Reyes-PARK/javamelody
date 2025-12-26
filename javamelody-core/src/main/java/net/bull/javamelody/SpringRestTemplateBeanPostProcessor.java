@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -24,6 +24,8 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.core.PriorityOrdered;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.web.client.RestTemplate;
+
+import net.bull.javamelody.internal.common.LOG;
 
 /**
  * Post-processor Spring pour un éventuel {@link RestTemplate} défini dans le fichier xml Spring.
@@ -62,7 +64,7 @@ public class SpringRestTemplateBeanPostProcessor implements BeanPostProcessor, P
 		// RestTemplate et getInterceptors() existent depuis spring-web 3.1.0.RELEASE
 		if (REST_TEMPLATE_INTERCEPTOR_AVAILABLE && bean instanceof RestTemplate) {
 			final RestTemplate restTemplate = (RestTemplate) bean;
-			final List<ClientHttpRequestInterceptor> interceptors = new ArrayList<ClientHttpRequestInterceptor>(
+			final List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>(
 					restTemplate.getInterceptors());
 			for (final ClientHttpRequestInterceptor interceptor : interceptors) {
 				if (interceptor instanceof SpringRestTemplateInterceptor) {
@@ -71,6 +73,7 @@ public class SpringRestTemplateBeanPostProcessor implements BeanPostProcessor, P
 			}
 			interceptors.add(SpringRestTemplateInterceptor.SINGLETON);
 			restTemplate.setInterceptors(interceptors);
+			LOG.debug("rest template interceptor initialized");
 		}
 
 		return bean;
@@ -81,11 +84,7 @@ public class SpringRestTemplateBeanPostProcessor implements BeanPostProcessor, P
 			final Class<?> clazz = Class.forName("org.springframework.web.client.RestTemplate");
 			clazz.getMethod("getInterceptors");
 			return true;
-		} catch (final ClassNotFoundException e) {
-			return false;
-		} catch (final NoSuchMethodException e) {
-			return false;
-		} catch (final SecurityException e) {
+		} catch (final ClassNotFoundException | SecurityException | NoSuchMethodException e) {
 			return false;
 		}
 	}

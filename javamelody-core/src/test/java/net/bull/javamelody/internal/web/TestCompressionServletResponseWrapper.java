@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -27,13 +27,12 @@ import java.io.PrintWriter;
 import java.util.Collection;
 import java.util.Locale;
 
-import javax.servlet.ServletOutputStream;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletResponse;
-
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.Utils;
 
 /**
@@ -265,6 +264,7 @@ public class TestCompressionServletResponseWrapper {
 				wrapper.getCurrentStatus());
 		assertNotNull("outputStream", wrapper.createOutputStream());
 		assertNotNull("writer", wrapper.getWriter());
+		wrapper.flushStream();
 		wrapper.flushBuffer();
 		wrapper.close();
 		wrapper.setContentLength(0);

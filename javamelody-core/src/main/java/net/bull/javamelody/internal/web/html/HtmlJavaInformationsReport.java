@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -81,7 +81,7 @@ public class HtmlJavaInformationsReport extends HtmlAbstractReport {
 		writeShowHideLink("detailsJava", "#Details#");
 		writeln("<br/><br/><br/>");
 		// div interne pour showHideLink
-		writeln("<div id='detailsJava' style='display: none;'><div>");
+		writeln("<div id='detailsJava' class='displayNone'><div>");
 		final boolean repeatHost = javaInformationsList.size() > 1;
 		for (final JavaInformations javaInformations : javaInformationsList) {
 			writeDetails(javaInformations, repeatHost);
@@ -196,16 +196,17 @@ public class HtmlJavaInformationsReport extends HtmlAbstractReport {
 
 		writeMemoryInformations(javaInformations.getMemoryInformations());
 
-		if (javaInformations.getFreeDiskSpaceInTemp() >= 0) {
-			// on considère que l'espace libre sur le disque dur est celui sur la partition du répertoire temporaire
-			writeln("<tr><td>#Free_disk_space#: </td><td>"
-					+ integerFormat.format(javaInformations.getFreeDiskSpaceInTemp() / 1024 / 1024)
-					+ " #Mo# " + columnEnd);
-		}
+		// on considère que l'espace libre sur le disque dur est celui sur la partition du répertoire temporaire
+		writeln("<tr><td>#Free_disk_space#: </td><td>"
+				+ integerFormat.format(javaInformations.getFreeDiskSpaceInTemp() / 1024 / 1024)
+				+ " #Mo# " + columnEnd);
+		writeln("<tr><td>#Usable_disk_space#: </td><td>"
+				+ integerFormat.format(javaInformations.getUsableDiskSpaceInTemp() / 1024 / 1024)
+				+ " #Mo# " + columnEnd);
 
 		writeDatabaseVersionAndDataSourceDetails(javaInformations);
 
-		writeln("<tr><td valign='top'>#Dependencies#: </td><td>");
+		writeln("<tr><td valign='top'><div class='noPrint'>#Dependencies#: </div></td><td>");
 		writeDependencies(javaInformations);
 		writeln(columnEnd);
 
@@ -243,11 +244,11 @@ public class HtmlJavaInformationsReport extends HtmlAbstractReport {
 			// writeDirectly pour ne pas gérer de traductions si la donnée contient '#'
 			writeDirectly(htmlEncodeButNotSpace(javaInformations.getDataSourceDetails()));
 			writeDirectly(
-					"<a href='http://commons.apache.org/proper/commons-dbcp/api-1.4/index.html'"
+					"<a href='http://commons.apache.org/proper/commons-dbcp/configuration.html'"
 							+ " class='noPrint' target='_blank'>DataSource reference</a>");
 
-			// for the newer commons dbcp v2, the following documentation would be better:
-			// http://commons.apache.org/proper/commons-dbcp/configuration.html
+			// before commons dbcp v2, the documentation was:
+			// http://commons.apache.org/proper/commons-dbcp/api-1.4/index.html
 			writeln(columnEnd);
 		}
 	}
@@ -274,7 +275,7 @@ public class HtmlJavaInformationsReport extends HtmlAbstractReport {
 
 	private void writeTomcatInformations(List<TomcatInformations> tomcatInformationsList)
 			throws IOException {
-		final List<TomcatInformations> list = new ArrayList<TomcatInformations>();
+		final List<TomcatInformations> list = new ArrayList<>();
 		for (final TomcatInformations tomcatInformations : tomcatInformationsList) {
 			if (tomcatInformations.getRequestCount() > 0) {
 				list.add(tomcatInformations);
@@ -359,19 +360,15 @@ public class HtmlJavaInformationsReport extends HtmlAbstractReport {
 			write(value);
 			return;
 		}
-		// la classe tooltip est configurée dans la css de HtmlReport
-		write("<a class='tooltip' href='?part=graph&amp;graph=");
-		write(graph);
-		write("'");
-		// ce onmouseover sert à charger les graphs par requête un par un et à la demande
-		// sans les charger tous au chargement de la page.
-		// le onmouseover se désactive après chargement pour ne pas recharger une image déjà chargée
-		write(" onmouseover=\"document.getElementById('");
 		final String id = "id" + graph;
-		write(id);
-		write("').src='?graph=");
+		// la classe tooltip est configurée dans la css de HtmlReport
+		write("<a class='tooltip replaceImage' href='?part=graph&amp;graph=");
 		write(graph);
-		write("&amp;width=100&amp;height=50'; this.onmouseover=null;\" >");
+		write("' data-img-id='");
+		write(id);
+		write("' data-img-src='?graph=");
+		write(graph);
+		write("&amp;width=100&amp;height=50'>");
 		// avant mouseover on prend une image qui sera mise en cache
 		write("<em><img src='?resource=systeminfo.png' id='");
 		write(id);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -36,11 +36,11 @@ import java.lang.annotation.Target;
  * <p/>
  * If the name attribute is specified on a method it will override the method name part.
  * Default: the name of the method.
- *
+ * <p>
  * Inspired by Erik van Oosten (Java Simon, Licence LGPL)
  * @author Emeric Vernat
  */
-@Retention(value = RetentionPolicy.RUNTIME)
+@Retention(RetentionPolicy.RUNTIME)
 @Target({ ElementType.METHOD, ElementType.TYPE })
 public @interface MonitoredWithGuice {
 	/**

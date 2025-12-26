@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -78,7 +78,7 @@ class PdfCacheInformationsReport extends PdfAbstractTableReport {
 		final Anchor ehcacheAnchor = new Anchor("Configuration reference", PdfFonts.BLUE.getFont());
 		ehcacheAnchor.setName("Ehcache configuration reference");
 		ehcacheAnchor.setReference(
-				"http://ehcache.sourceforge.net/apidocs/net/sf/ehcache/config/CacheConfiguration.html#field_summary");
+				"http://www.ehcache.org/apidocs/2.9/net/sf/ehcache/config/CacheConfiguration.html#field_summary");
 		ehcacheAnchor.setFont(PdfFonts.BLUE.getFont());
 		final Paragraph ehcacheParagraph = new Paragraph();
 		ehcacheParagraph.add(ehcacheAnchor);
@@ -98,7 +98,7 @@ class PdfCacheInformationsReport extends PdfAbstractTableReport {
 	}
 
 	private List<String> createHeaders() {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getString("Cache"));
 		if (configurationEnabled) {
 			headers.add(getString("Pourcentage_memoire_utilise"));

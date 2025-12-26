@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -67,7 +67,7 @@ class ChartsPanel extends MelodyPanel {
 		add(createButtonsPanel(), BorderLayout.CENTER);
 
 		// SwingWorker pour afficher le reste de l'écran et pour éviter de faire attendre rien que pour les graphiques
-		final SwingWorker<Map<String, byte[]>, Object> swingWorker = new SwingWorker<Map<String, byte[]>, Object>() {
+		final SwingWorker<Map<String, byte[]>, Object> swingWorker = new SwingWorker<>() {
 			@Override
 			protected Map<String, byte[]> doInBackground() throws IOException {
 				return getRemoteCollector().collectJRobins(CHART_WIDTH, CHART_HEIGHT);

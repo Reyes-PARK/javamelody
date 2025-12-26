@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -77,7 +77,7 @@ class PdfHotspotsReport extends PdfAbstractTableReport {
 	}
 
 	private List<String> createHeaders() {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getString("Methode_executee"));
 		headers.add(getString("percent_time"));
 		return headers;

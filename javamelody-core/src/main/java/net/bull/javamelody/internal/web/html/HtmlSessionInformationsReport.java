@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -25,8 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-import javax.servlet.http.HttpSession;
-
+import jakarta.servlet.http.HttpSession;
 import net.bull.javamelody.SessionListener;
 import net.bull.javamelody.internal.common.I18N;
 import net.bull.javamelody.internal.common.Parameters;
@@ -40,7 +39,7 @@ import net.bull.javamelody.internal.model.SessionInformations.SessionAttribute;
 public class HtmlSessionInformationsReport extends HtmlAbstractReport {
 	private static final String[] OS = { "linux", "windows", "mac", "solaris", "hp", "ibm",
 			"android", };
-	private static final String[] BROWSERS = { "chrome", "crios", "edge", "firefox", "msie",
+	private static final String[] BROWSERS = { "chrome", "crios", "edge", "edg", "firefox", "msie",
 			"opera", "safari", };
 	private static final String A_HREF_PART_SESSIONS = "<a href='?part=sessions";
 	private final List<SessionInformations> sessionsInformations;
@@ -126,8 +125,7 @@ public class HtmlSessionInformationsReport extends HtmlAbstractReport {
 
 	private void writeBackAndRefreshLinks() throws IOException {
 		writeln("<div class='noPrint'>");
-		writeln("<a href='javascript:history.back()'>");
-		writeln("<img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
+		writeln("<a class='back' href=''><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
 		writeln("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 		writeln(A_HREF_PART_SESSIONS + "'>");
 		writeln("<img src='?resource=action_refresh.png' alt='#Actualiser#'/> #Actualiser#</a>");
@@ -138,15 +136,15 @@ public class HtmlSessionInformationsReport extends HtmlAbstractReport {
 		}
 		writeln("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 		writeln(A_HREF_PART_SESSIONS + "&amp;action=invalidate_sessions" + getCsrfTokenUrlPart()
-				+ "' onclick=\"javascript:return confirm('"
-				+ getStringForJavascript("confirm_invalidate_sessions") + "');\">");
+				+ "' class='confirm' data-confirm='"
+				+ htmlEncodeButNotSpaceAndNewLine(getString("confirm_invalidate_sessions")) + "'>");
 		writeln("<img width='16' height='16' src='?resource=user-trash.png' alt='#invalidate_sessions#' title='#invalidate_sessions#' /> #invalidate_sessions#</a>");
 		writeln("</div>");
 	}
 
 	private void writeBackAndRefreshLinksForSession(String sessionId) throws IOException {
 		writeln("<div class='noPrint'>");
-		writeln("<a href='javascript:history.back()'><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
+		writeln("<a class='back' href=''><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 		writeln(A_HREF_PART_SESSIONS + "&amp;sessionId=" + urlEncode(sessionId) + "'>");
 		writeln("<img src='?resource=action_refresh.png' alt='#Actualiser#'/> #Actualiser#</a>");
 		writeln("</div>");
@@ -278,8 +276,8 @@ public class HtmlSessionInformationsReport extends HtmlAbstractReport {
 		write("&amp;action=invalidate_session&amp;sessionId=");
 		write(urlEncode(session.getId()));
 		write(getCsrfTokenUrlPart());
-		write("' onclick=\"javascript:return confirm('"
-				+ getStringForJavascript("confirm_invalidate_session") + "');\">");
+		write("' class='confirm' data-confirm='"
+				+ htmlEncodeButNotSpaceAndNewLine(getString("confirm_invalidate_session")) + "'>");
 		write("<img width='16' height='16' src='?resource=user-trash.png' alt='#invalidate_session#' title='#invalidate_session#' />");
 		write("</a>");
 	}

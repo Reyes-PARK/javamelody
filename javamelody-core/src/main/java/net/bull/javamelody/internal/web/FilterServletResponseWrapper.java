@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -21,9 +21,9 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 
-import javax.servlet.ServletOutputStream;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpServletResponseWrapper;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponseWrapper;
 
 /**
  * Implémentation de {@link HttpServletResponseWrapper} permettant d'encapsuler l'outputStream,
@@ -33,7 +33,7 @@ import javax.servlet.http.HttpServletResponseWrapper;
 abstract class FilterServletResponseWrapper extends HttpServletResponseWrapper {
 	private ServletOutputStream stream;
 	private PrintWriter writer;
-	private int status;
+	private int status = HttpServletResponse.SC_OK;
 
 	/**
 	 * Constructeur.
@@ -152,6 +152,17 @@ abstract class FilterServletResponseWrapper extends HttpServletResponseWrapper {
 	/** {@inheritDoc} */
 	@Override
 	public void flushBuffer() throws IOException {
+		if (writer != null) {
+			writer.flush();
+		} else if (stream != null) {
+			stream.flush();
+		} else {
+			// writes status code and headers when no content (issue #836)
+			super.flushBuffer();
+		}
+	}
+
+	public void flushStream() throws IOException {
 		if (writer != null) {
 			writer.flush();
 		} else if (stream != null) {

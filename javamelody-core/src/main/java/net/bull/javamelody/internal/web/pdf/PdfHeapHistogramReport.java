@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -91,7 +91,7 @@ class PdfHeapHistogramReport extends PdfAbstractTableReport {
 	}
 
 	private List<String> createHeaders(boolean sourceDisplayed) {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getString("Classe"));
 		headers.add(getString("Taille"));
 		headers.add(getString("pct_taille"));

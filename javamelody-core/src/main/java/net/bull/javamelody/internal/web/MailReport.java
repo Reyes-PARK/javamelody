@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -90,7 +90,7 @@ public class MailReport {
 			mailPeriods = Collections.singletonList(Period.SEMAINE);
 		} else {
 			final String mailPeriodsParameter = Parameter.MAIL_PERIODS.getValue();
-			mailPeriods = new ArrayList<Period>();
+			mailPeriods = new ArrayList<>();
 			for (final String mailPeriod : mailPeriodsParameter.split(",")) {
 				mailPeriods.add(Period.valueOfByMailCode(mailPeriod));
 			}
@@ -146,13 +146,10 @@ public class MailReport {
 		final File tmpFile = new File(Parameters.TEMPORARY_DIRECTORY,
 				PdfReport.getFileName(collector.getApplication()));
 		try {
-			final OutputStream output = new BufferedOutputStream(new FileOutputStream(tmpFile));
-			try {
+			try (OutputStream output = new BufferedOutputStream(new FileOutputStream(tmpFile))) {
 				final PdfReport pdfReport = new PdfReport(collector, collectorServer,
 						javaInformationsList, period, output);
 				pdfReport.toPdf();
-			} finally {
-				output.close();
 			}
 
 			final String subject;

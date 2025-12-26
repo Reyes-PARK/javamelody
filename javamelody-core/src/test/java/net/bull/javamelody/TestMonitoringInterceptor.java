@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -24,11 +24,10 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Map;
 
-import javax.interceptor.InvocationContext;
-
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.interceptor.InvocationContext;
 import net.bull.javamelody.internal.model.Counter;
 
 /**
@@ -77,9 +76,7 @@ public class TestMonitoringInterceptor {
 		public Method getMethod() {
 			try {
 				return TestMonitoringInterceptor.class.getMethod("testInvoke");
-			} catch (final SecurityException e) {
-				throw new IllegalStateException(e);
-			} catch (final NoSuchMethodException e) {
+			} catch (final SecurityException | NoSuchMethodException e) {
 				throw new IllegalStateException(e);
 			}
 		}

@@ -4,16 +4,17 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Enumeration;
 
-import javax.servlet.ServletConfig;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
 import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
+import org.springframework.http.HttpEntity;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+
+import jakarta.servlet.ServletConfig;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * When enabled, management endpoint for /monitoring reports on the management http port instead of the application http port.
@@ -57,16 +58,19 @@ public class MonitoringEndpoint {
 
 	/**
 	 * Display a report page.
+	 * @return HttpEntity.EMPTY
 	 * @throws ServletException e
 	 * @throws IOException e
 	 */
 	@ReadOperation
-	public void report() throws ServletException, IOException {
+	public Object report() throws ServletException, IOException {
 		final ServletRequestAttributes currentRequestAttributes = (ServletRequestAttributes) RequestContextHolder
 				.currentRequestAttributes();
 		final HttpServletRequest httpServletRequest = currentRequestAttributes.getRequest();
 		final HttpServletResponse httpResponse = currentRequestAttributes.getResponse();
 
 		reportServlet.service(httpServletRequest, httpResponse);
+		// status, headers and body are managed by the servlet, so return HttpEntity.EMPTY
+		return HttpEntity.EMPTY;
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -160,7 +160,7 @@ class JobInformationsPanel extends MelodyPanel {
 						.get(myTable.convertRowIndexToModel(row));
 				final String description = jobInformations.getDescription();
 				if (description != null) {
-					setToolTipText("<html>" + description.replaceAll("\n", "<br/>"));
+					setToolTipText("<html>" + description.replace("\n", "<br/>"));
 				} else {
 					setToolTipText(null);
 				}
@@ -198,7 +198,7 @@ class JobInformationsPanel extends MelodyPanel {
 				} else {
 					setIcon(ImageIconCache.getImageIcon("bullets/red.png"));
 					setToolTipText("<html>" + stackTrace.replace("[See nested", "\n[See nested")
-							.replaceAll("\n", "<br/>"));
+							.replace("\n", "<br/>"));
 				}
 			}
 			// sans texte

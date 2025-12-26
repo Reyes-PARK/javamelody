@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -32,6 +32,7 @@ import net.bull.javamelody.internal.model.ThreadInformations;
  * @author Emeric Vernat
  */
 public class HtmlThreadInformationsReport extends HtmlAbstractReport {
+	private static final boolean JAVA_20_OR_LATER = "20".compareTo(Parameters.JAVA_VERSION) < 0;
 	private final List<ThreadInformations> threadInformationsList;
 	private final DecimalFormat integerFormat = I18N.createIntegerFormat();
 	private final boolean stackTraceEnabled;
@@ -63,7 +64,9 @@ public class HtmlThreadInformationsReport extends HtmlAbstractReport {
 		}
 		if (systemActionsEnabled) {
 			writeln("<th class='noPrint'>#Interrupt#</th>");
-			writeln("<th class='noPrint'>#Tuer#</th>");
+			if (!JAVA_20_OR_LATER) {
+				writeln("<th class='noPrint'>#Tuer#</th>");
+			}
 		}
 		for (final ThreadInformations threadInformations : threadInformationsList) {
 			table.nextRow();
@@ -127,7 +130,7 @@ public class HtmlThreadInformationsReport extends HtmlAbstractReport {
 	}
 
 	private List<ThreadInformations> getDeadLockedThreads() {
-		final List<ThreadInformations> deadlockedThreads = new ArrayList<ThreadInformations>();
+		final List<ThreadInformations> deadlockedThreads = new ArrayList<>();
 		for (final ThreadInformations thread : threadInformationsList) {
 			if (thread.isDeadlocked()) {
 				deadlockedThreads.add(thread);
@@ -198,8 +201,11 @@ public class HtmlThreadInformationsReport extends HtmlAbstractReport {
 	}
 
 	void writeThreadWithStackTrace(ThreadInformations threadInformations) throws IOException {
-		final List<StackTraceElement> stackTrace = threadInformations.getStackTrace();
-		final String encodedName = htmlEncode(threadInformations.getName());
+		writeThreadWithStackTrace(threadInformations.getName(), threadInformations.getStackTrace());
+	}
+
+	void writeThreadWithStackTrace(String threadName, List<StackTraceElement> stackTrace) throws IOException {
+		final String encodedName = htmlEncode(threadName);
 		if (stackTrace != null && !stackTrace.isEmpty()) {
 			// même si stackTraceEnabled, ce thread n'a pas forcément de stack-trace
 			writeln("<div class='tooltip'>");
@@ -223,9 +229,12 @@ public class HtmlThreadInformationsReport extends HtmlAbstractReport {
 
 	void writeExecutedMethod(ThreadInformations threadInformations) throws IOException {
 		final String executedMethod = threadInformations.getExecutedMethod();
+		writeExecutedMethod(executedMethod);
+	}
+
+	void writeExecutedMethod(String executedMethod) throws IOException {
 		if (executedMethod != null && !executedMethod.isEmpty()) {
-			writeDirectly(HtmlSourceReport
-					.htmlEncodeStackTraceElement(threadInformations.getExecutedMethod()));
+			writeDirectly(HtmlSourceReport.htmlEncodeStackTraceElement(executedMethod));
 		} else {
 			writeDirectly("&nbsp;");
 		}
@@ -237,12 +246,12 @@ public class HtmlThreadInformationsReport extends HtmlAbstractReport {
 			write("<a href='?action=send_thread_interrupt&amp;threadId=");
 			write(threadInformations.getGlobalThreadId());
 			write(getCsrfTokenUrlPart());
-			final String confirmSendThreadInterrupt = javascriptEncode(getFormattedString(
-					"confirm_send_thread_interrupt", threadInformations.getName()));
+			final String confirmSendThreadInterrupt = htmlEncodeButNotSpaceAndNewLine(
+					getFormattedString("confirm_send_thread_interrupt",
+							threadInformations.getName()));
 			// writeDirectly pour ne pas gérer de traductions si le nom contient '#'
-			writeDirectly("' onclick=\"javascript:return confirm('" + confirmSendThreadInterrupt
-					+ "');\">");
-			final String title = javascriptEncode(
+			writeDirectly("' class='confirm' data-confirm='" + confirmSendThreadInterrupt + "'>");
+			final String title = htmlEncodeButNotSpaceAndNewLine(
 					getFormattedString("send_thread_interrupt", threadInformations.getName()));
 			writeDirectly("<img width='16' height='16' src='?resource=action_interrupt.png' alt='"
 					+ title + "' title='" + title + "' />");
@@ -251,15 +260,15 @@ public class HtmlThreadInformationsReport extends HtmlAbstractReport {
 	}
 
 	void writeKillThread(ThreadInformations threadInformations) throws IOException {
-		if (systemActionsEnabled) {
+		if (systemActionsEnabled && !JAVA_20_OR_LATER) {
 			write("</td> <td align='center' class='noPrint'>");
 			write("<a href='?action=kill_thread&amp;threadId=");
 			write(threadInformations.getGlobalThreadId());
 			write(getCsrfTokenUrlPart());
-			final String confirmKillThread = javascriptEncode(
+			final String confirmKillThread = htmlEncodeButNotSpaceAndNewLine(
 					getFormattedString("confirm_kill_thread", threadInformations.getName()));
 			// writeDirectly pour ne pas gérer de traductions si le nom contient '#'
-			writeDirectly("' onclick=\"javascript:return confirm('" + confirmKillThread + "');\">");
+			writeDirectly("' class='confirm' data-confirm='" + confirmKillThread + "'>");
 			final String title = htmlEncode(
 					getFormattedString("kill_thread", threadInformations.getName()));
 			writeDirectly("<img width='16' height='16' src='?resource=stop.png' alt='" + title

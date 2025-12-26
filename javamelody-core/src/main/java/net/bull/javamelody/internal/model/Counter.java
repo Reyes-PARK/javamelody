@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -30,8 +30,9 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.servlet.http.HttpServletRequest;
-
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import net.bull.javamelody.SessionListener;
 import net.bull.javamelody.internal.common.LOG;
 
 /**
@@ -39,7 +40,7 @@ import net.bull.javamelody.internal.common.LOG;
  * Ces données sont accumulées au fil du temps selon les requêtes dans l'application.
  * Elles correspondent soit aux statistiques courantes depuis une date initiale,
  * soit à une période donnée pour un jour, une semaine, un mois ou une année.
- *
+ * <p>
  * Toutes les méthodes sur une instance de cette classe sont conçues pour être thread-safe,
  * c'est-à-dire qu'elles gère un état qui est non modifiable
  * ou alors synchronisé pour être accessible et modifiable depuis plusieurs threads.
@@ -97,8 +98,27 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	 * mais peut être redéfini par exemple pour le counter des erreurs http ou celui des logs.
 	 */
 	static final int MAX_REQUESTS_COUNT = 10000;
+	/**
+	 * Comparateur pour ordonner les requêtes par sommes des durées décroissantes.
+	 */
+	static final Comparator<CounterRequest> COUNTER_REQUEST_COMPARATOR = Comparator
+			.comparingLong(CounterRequest::getDurationsSum).reversed();
+
+	/**
+	 * Comparateur pour ordonner les requêtes par nombres d'exécutions décroissants.
+	 */
+	private static final Comparator<CounterRequest> COUNTER_REQUEST_BY_HITS_COMPARATOR = Comparator
+			.comparingLong(CounterRequest::getHits).reversed();
+
+	/**
+	 * Comparateur pour ordonner les erreurs par heures d'exécution croissantes.
+	 */
+	private static final Comparator<CounterError> COUNTER_ERROR_COMPARATOR = Comparator
+			.comparingLong(CounterError::getTime);
+
 	private static final String TRANSFORM_REPLACEMENT = "\\" + TRANSFORM_REPLACEMENT_CHAR;
 	private static final long serialVersionUID = 6759729262180992976L;
+
 	private String application;
 	private boolean displayed = true;
 	private transient boolean used;
@@ -109,11 +129,11 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	// on conserve childCounterName et pas childCounter pour assurer la synchronisation/clone et la sérialisation
 	private final String childCounterName;
 	@SuppressWarnings("all")
-	private final ConcurrentMap<String, CounterRequest> requests = new ConcurrentHashMap<String, CounterRequest>();
+	private final ConcurrentMap<String, CounterRequest> requests = new ConcurrentHashMap<>();
 	// note : même si rootCurrentContextsByThreadId n'est pas transient la map est normalement vide avant sérialisation
 	// (on garde en non transient pour ne pas avoir null après désérialisation ce qui pourrait donner des NPE)
 	@SuppressWarnings("all")
-	private final ConcurrentMap<Long, CounterRequestContext> rootCurrentContextsByThreadId = new ConcurrentHashMap<Long, CounterRequestContext>();
+	private final ConcurrentMap<Long, CounterRequestContext> rootCurrentContextsByThreadId = new ConcurrentHashMap<>();
 	private final LinkedList<CounterError> errors; // NOPMD
 	private Date startDate = new Date();
 	private int maxRequestsCount = MAX_REQUESTS_COUNT;
@@ -125,65 +145,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	private transient Pattern requestTransformPattern;
 
 	/**
-	 * Comparateur pour ordonner les requêtes par sommes des durées.
-	 */
-	static final class CounterRequestComparator
-			implements Comparator<CounterRequest>, Serializable {
-		private static final long serialVersionUID = 1L;
-
-		/** {@inheritDoc} */
-		@Override
-		public int compare(CounterRequest request1, CounterRequest request2) {
-			if (request1.getDurationsSum() > request2.getDurationsSum()) {
-				return 1;
-			} else if (request1.getDurationsSum() < request2.getDurationsSum()) {
-				return -1;
-			} else {
-				return 0;
-			}
-		}
-	}
-
-	/**
-	 * Comparateur pour ordonner les requêtes par nombre d'exécutions.
-	 */
-	static final class CounterRequestByHitsComparator
-			implements Comparator<CounterRequest>, Serializable {
-		private static final long serialVersionUID = 1L;
-
-		/** {@inheritDoc} */
-		@Override
-		public int compare(CounterRequest request1, CounterRequest request2) {
-			if (request1.getHits() > request2.getHits()) {
-				return 1;
-			} else if (request1.getHits() < request2.getHits()) {
-				return -1;
-			} else {
-				return 0;
-			}
-		}
-	}
-
-	/**
-	 * Comparateur pour ordonner les erreurs par heures d'exécution.
-	 */
-	static final class CounterErrorComparator implements Comparator<CounterError>, Serializable {
-		private static final long serialVersionUID = 1L;
-
-		/** {@inheritDoc} */
-		@Override
-		public int compare(CounterError error1, CounterError error2) {
-			if (error1.getTime() < error2.getTime()) {
-				return -1;
-			} else if (error1.getTime() > error2.getTime()) {
-				return 1;
-			}
-			return 0;
-		}
-	}
-
-	/**
-	 * Comparateur pour ordonner les requêtes en cours par durées écoulées.
+	 * Comparateur pour ordonner les requêtes en cours par durées écoulées décroissantes.
 	 */
 	public static final class CounterRequestContextComparator
 			implements Comparator<CounterRequestContext>, Serializable {
@@ -198,14 +160,8 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 		/** {@inheritDoc} */
 		@Override
 		public int compare(CounterRequestContext context1, CounterRequestContext context2) {
-			if (context1.getDuration(timeOfSnapshot) > context2.getDuration(timeOfSnapshot)) {
-				return 1;
-			} else if (context1.getDuration(timeOfSnapshot) < context2
-					.getDuration(timeOfSnapshot)) {
-				return -1;
-			} else {
-				return 0;
-			}
+			return Integer.compare(context2.getDuration(timeOfSnapshot),
+					context1.getDuration(timeOfSnapshot));
 		}
 	}
 
@@ -216,7 +172,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	 */
 	public Counter(String name, String iconName) {
 		// ici, pas de compteur fils
-		this(name, name, iconName, null, new ThreadLocal<CounterRequestContext>());
+		this(name, name, iconName, null, new ThreadLocal<>());
 	}
 
 	/**
@@ -227,8 +183,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	 * @param childCounterName Nom du compteur fils (par exemple: sql)
 	 */
 	public Counter(String name, String storageName, String iconName, String childCounterName) {
-		this(name, storageName, iconName, childCounterName,
-				new ThreadLocal<CounterRequestContext>());
+		this(name, storageName, iconName, childCounterName, new ThreadLocal<>());
 	}
 
 	/**
@@ -254,7 +209,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 		this.childCounterName = childCounterName;
 		this.contextThreadLocal = contextThreadLocal;
 		if (errorCounter) {
-			this.errors = new LinkedList<CounterError>();
+			this.errors = new LinkedList<>();
 		} else {
 			this.errors = null;
 		}
@@ -414,21 +369,35 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	}
 
 	public void bindContextIncludingCpu(String requestName) {
-		bindContext(requestName, requestName, null, null,
-				ThreadInformations.getCurrentThreadCpuTime(),
+		bindContext(requestName, requestName, null, ThreadInformations.getCurrentThreadCpuTime(),
 				ThreadInformations.getCurrentThreadAllocatedBytes());
 	}
 
 	public void bindContext(String requestName, String completeRequestName,
-			HttpServletRequest httpRequest, String remoteUser, long startCpuTime,
-			long startAllocatedBytes) {
+			HttpServletRequest httpRequest, long startCpuTime, long startAllocatedBytes) {
+		String remoteUser = null;
+		String sessionId = null;
+		if (httpRequest != null) {
+			remoteUser = httpRequest.getRemoteUser();
+			final HttpSession session = httpRequest.getSession(false);
+			if (session != null) {
+				sessionId = session.getId();
+				if (remoteUser == null) {
+					final Object userAttribute = session
+							.getAttribute(SessionListener.SESSION_REMOTE_USER);
+					if (userAttribute instanceof String) {
+						remoteUser = (String) userAttribute;
+					}
+				}
+			}
+		}
 		// requestName est la même chose que ce qui sera utilisée dans addRequest,
 		// completeRequestName est la même chose éventuellement complétée
 		// pour cette requête à destination de l'affichage dans les requêtes courantes
 		// (sinon mettre 2 fois la même chose)
 		final CounterRequestContext context = new CounterRequestContext(this,
 				contextThreadLocal.get(), requestName, completeRequestName, httpRequest, remoteUser,
-				startCpuTime, startAllocatedBytes);
+				startCpuTime, startAllocatedBytes, sessionId);
 		contextThreadLocal.set(context);
 		if (context.getParentContext() == null) {
 			rootCurrentContextsByThreadId.put(context.getThreadId(), context);
@@ -468,13 +437,13 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	}
 
 	public void addRequest(String requestName, long duration, int cpuTime, int allocatedKBytes,
-			boolean systemError, int responseSize) {
+			boolean systemError, long responseSize) {
 		addRequest(requestName, duration, cpuTime, allocatedKBytes, systemError, null,
 				responseSize);
 	}
 
 	private void addRequest(String requestName, long duration, int cpuTime, int allocatedKBytes,
-			boolean systemError, String systemErrorStackTrace, int responseSize) {
+			boolean systemError, String systemErrorStackTrace, long responseSize) {
 		// la méthode addRequest n'est pas synchronisée pour ne pas avoir
 		// de synchronisation globale à l'application sur cette instance d'objet
 		// ce qui pourrait faire une contention et des ralentissements,
@@ -484,7 +453,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 		assert duration >= 0;
 		assert cpuTime >= -1; // -1 pour requêtes sql
 		assert allocatedKBytes >= -1; // -1 pour requêtes sql
-		assert responseSize >= -1; // -1 pour requêtes sql
+		assert responseSize >= -1L; // -1 pour requêtes sql
 
 		final String aggregateRequestName = getAggregateRequestName(requestName);
 
@@ -713,7 +682,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 			if (errors.size() > 1) {
 				// "sort" a les mêmes performances sur LinkedList que sur ArrayList car il y a un tableau intermédiaire
 				// (selon Implementation Patterns, Kent Beck)
-				Collections.sort(errors, new CounterErrorComparator());
+				errors.sort(COUNTER_ERROR_COMPARATOR);
 
 				while (errors.size() > MAX_ERRORS_COUNT) {
 					errors.removeFirst();
@@ -776,6 +745,24 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	}
 
 	/**
+	 * Retourne l'objet {@link CounterRequest} correspondant à l'id en paramètre ou null sinon.
+	 * @param requestId Id de la requête
+	 * @return CounterRequest
+	 */
+	public CounterRequest getCounterRequestById(String requestId) {
+		if (isRequestIdFromThisCounter(requestId)) {
+			for (final CounterRequest request : requests.values()) {
+				if (request.getId().equals(requestId)) {
+					synchronized (request) {
+						return request.clone();
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Retourne le nombre de requêtes dans ce counter.
 	 * @return int
 	 */
@@ -793,7 +780,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 		// de manière à ce que l'appelant n'ai pas à se préoccuper des synchronisations nécessaires
 		// Rq : l'Iterator sur ConcurrentHashMap.values() est garanti ne pas lancer ConcurrentModificationException
 		// même s'il y a des ajouts concurrents
-		final List<CounterRequest> result = new ArrayList<CounterRequest>(requests.size());
+		final List<CounterRequest> result = new ArrayList<>(requests.size());
 		for (final CounterRequest request : requests.values()) {
 			// on synchronize sur request en cas d'ajout en parallèle d'un hit sur cette request
 			synchronized (request) {
@@ -810,7 +797,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	public List<CounterRequest> getOrderedRequests() {
 		final List<CounterRequest> requestList = getRequests();
 		if (requestList.size() > 1) {
-			Collections.sort(requestList, Collections.reverseOrder(new CounterRequestComparator()));
+			requestList.sort(COUNTER_REQUEST_COMPARATOR);
 		}
 		return requestList;
 	}
@@ -822,27 +809,24 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	List<CounterRequest> getOrderedByHitsRequests() {
 		final List<CounterRequest> requestList = getRequests();
 		if (requestList.size() > 1) {
-			Collections.sort(requestList,
-					Collections.reverseOrder(new CounterRequestByHitsComparator()));
+			requestList.sort(COUNTER_REQUEST_BY_HITS_COMPARATOR);
 		}
 		return requestList;
 	}
 
 	/**
 	 * @return Liste des contextes de requêtes courantes triées par durée écoulée décroissante,
-	 * 	la liste peut être utilisée sans synchronized et sans crainte d'accès concurrents,
-	 *  toutefois les contextes ne sont pas actuellement clonés dans cette méthode.
+	 * 	la liste peut être utilisée sans synchronized et sans crainte d'accès concurrents.
 	 */
 	List<CounterRequestContext> getOrderedRootCurrentContexts() {
-		final List<CounterRequestContext> contextList = new ArrayList<CounterRequestContext>(
+		final List<CounterRequestContext> contextList = new ArrayList<>(
 				rootCurrentContextsByThreadId.size());
 		for (final CounterRequestContext rootCurrentContext : rootCurrentContextsByThreadId
 				.values()) {
 			contextList.add(rootCurrentContext.clone());
 		}
 		if (contextList.size() > 1) {
-			Collections.sort(contextList, Collections
-					.reverseOrder(new CounterRequestContextComparator(System.currentTimeMillis())));
+			contextList.sort(new CounterRequestContextComparator(System.currentTimeMillis()));
 		}
 		return contextList;
 	}
@@ -856,7 +840,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 			return Collections.emptyList();
 		}
 		synchronized (errors) {
-			return new ArrayList<CounterError>(errors);
+			return new ArrayList<>(errors);
 		}
 	}
 
@@ -874,12 +858,12 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	}
 
 	/**
-	 * Purge les requêtes, requêtes en cours et erreurs puis positionne la date et heure de début
-	 * à l'heure courante.
+	 * Purge les requêtes et erreurs puis positionne la date et heure de début à l'heure courante,
+	 * mais sans toucher aux requêtes en cours pour qu'elles restent affichées,
+	 * par exemple dans le serveur de collecte (#871).
 	 */
 	public void clear() {
 		requests.clear();
-		rootCurrentContextsByThreadId.clear();
 		if (errors != null) {
 			synchronized (errors) {
 				errors.clear();
@@ -894,7 +878,7 @@ public class Counter implements Cloneable, Serializable { // NOPMD
 	public Counter clone() { // NOPMD
 		//CHECKSTYLE:ON
 		final Counter clone = new Counter(getName(), getStorageName(), getIconName(),
-				getChildCounterName(), new ThreadLocal<CounterRequestContext>());
+				getChildCounterName(), new ThreadLocal<>());
 		clone.application = getApplication();
 		clone.startDate = getStartDate();
 		clone.maxRequestsCount = getMaxRequestsCount();

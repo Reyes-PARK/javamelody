@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -54,8 +54,8 @@ class PdfDocumentFactory {
 	private final String application;
 	private final Range range;
 	private final OutputStream output;
-	private final Map<String, Image> paragraphImagesByResourceName = new HashMap<String, Image>();
-	private final Map<String, Image> smallImagesByResourceName = new HashMap<String, Image>();
+	private final Map<String, Image> paragraphImagesByResourceName = new HashMap<>();
+	private final Map<String, Image> smallImagesByResourceName = new HashMap<>();
 	private final Font paragraphTitleFont = PdfFonts.PARAGRAPH_TITLE.getFont();
 
 	private static class PdfAdvancedPageNumberEvents extends PdfPageEventHelper {

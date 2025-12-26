@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -23,10 +23,11 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
@@ -39,22 +40,24 @@ import net.bull.javamelody.internal.model.LabradorRetriever;
  * @author Emeric Vernat
  */
 class InfluxDB extends MetricsPublisher {
+	private static final Map<String, String> DEFAULT_HTTP_HEADERS = Collections
+			.singletonMap("Content-Type", "plain/text");
+
 	private static final char SEPARATOR = ' ';
 
 	private final URL influxDbUrl;
 	private final String prefix;
 	private final String tags;
 
-	private final Map<String, String> httpHeaders = Collections.singletonMap("Content-Type",
-			"plain/text");
+	private final Map<String, String> httpHeaders;
 	private final DecimalFormat decimalFormat = new DecimalFormat("0.00",
 			DecimalFormatSymbols.getInstance(Locale.US));
 	private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-	private final Writer bufferWriter = new OutputStreamWriter(buffer, Charset.forName("UTF-8"));
+	private final Writer bufferWriter = new OutputStreamWriter(buffer, StandardCharsets.UTF_8);
 	private long lastTime;
 	private String lastTimestamp;
 
-	InfluxDB(URL influxDbUrl, String prefix, String tags) {
+	InfluxDB(URL influxDbUrl, String prefix, String tags, String influxDbApiToken) {
 		super();
 		assert influxDbUrl != null;
 		assert prefix != null;
@@ -62,6 +65,13 @@ class InfluxDB extends MetricsPublisher {
 		this.influxDbUrl = influxDbUrl;
 		this.prefix = prefix;
 		this.tags = tags;
+		if (influxDbApiToken == null) {
+			httpHeaders = DEFAULT_HTTP_HEADERS;
+		} else {
+			httpHeaders = new HashMap<>();
+			httpHeaders.putAll(DEFAULT_HTTP_HEADERS);
+			httpHeaders.put("Authorization", "Token " + influxDbApiToken);
+		}
 	}
 
 	static InfluxDB getInstance(String contextPath, String hostName) {
@@ -77,9 +87,11 @@ class InfluxDB extends MetricsPublisher {
 			// see https://docs.influxdata.com/influxdb/v1.3/write_protocols/line_protocol_reference/#special-characters
 			final String tags = (",application=" + contextPath + ",host=" + hostName)
 					.replace(SEPARATOR, '_');
+			final String influxDbApiToken = Parameter.INFLUXDB_API_TOKEN.getValue();
 			try {
 				// timestamps will be written with a precision of a second
-				return new InfluxDB(new URL(influxDbUrl + "&precision=s"), prefix, tags);
+				return new InfluxDB(new URL(influxDbUrl + "&precision=s"), prefix, tags,
+						influxDbApiToken);
 			} catch (final MalformedURLException e) {
 				throw new IllegalArgumentException(e);
 			}

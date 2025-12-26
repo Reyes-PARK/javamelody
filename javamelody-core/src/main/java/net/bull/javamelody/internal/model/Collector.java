@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -25,7 +25,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,24 +49,25 @@ public class Collector { // NOPMD
 	private final String application;
 	private final List<Counter> counters;
 	private final SamplingProfiler samplingProfiler;
-	private final Map<String, JRobin> requestJRobinsById = new ConcurrentHashMap<String, JRobin>();
+	private final Map<String, JRobin> requestJRobinsById = new ConcurrentHashMap<>();
 	// les instances jrobins des compteurs sont créées à l'initialisation
-	private final Map<String, JRobin> counterJRobins = new LinkedHashMap<String, JRobin>();
-	private final Map<String, JRobin> otherJRobins = new LinkedHashMap<String, JRobin>();
+	private final Map<String, JRobin> counterJRobins = new LinkedHashMap<>();
+	private final Map<String, JRobin> otherJRobins = new LinkedHashMap<>();
 	// globalRequestsByCounter, requestsById, dayCountersByCounter et cpuTimeMillis
 	// sont utilisés par un seul thread lors des collectes,
 	// (et la méthode centrale "collect" est synchronisée pour éviter un accès concurrent
 	// avec la mise à jour avant le rapport html)
-	private final Map<Counter, CounterRequest> globalRequestsByCounter = new HashMap<Counter, CounterRequest>();
-	private final Map<String, CounterRequest> requestsById = new HashMap<String, CounterRequest>();
-	private final Map<Counter, Counter> dayCountersByCounter = new LinkedHashMap<Counter, Counter>();
-	private final Map<Counter, Boolean> firstCollectDoneByCounter = new HashMap<Counter, Boolean>();
+	private final Map<Counter, CounterRequest> globalRequestsByCounter = new HashMap<>();
+	private final Map<String, CounterRequest> requestsById = new HashMap<>();
+	private final Map<Counter, Counter> dayCountersByCounter = new LinkedHashMap<>();
+	private final Map<Counter, Boolean> firstCollectDoneByCounter = new HashMap<>();
 	private long transactionCount = NOT_A_NUMBER;
 	private long cpuTimeMillis = NOT_A_NUMBER;
 	private long gcTimeMillis = NOT_A_NUMBER;
 	private long tomcatBytesReceived = NOT_A_NUMBER;
 	private long tomcatBytesSent = NOT_A_NUMBER;
 	private long lastCollectDuration;
+	private Throwable lastCollectorException;
 	private long estimatedMemorySize;
 	private long diskUsage;
 	private Date lastDateOfDeletedObsoleteFiles = new Date();
@@ -98,7 +98,7 @@ public class Collector { // NOPMD
 		assert application != null;
 		assert counters != null;
 		this.application = application;
-		this.counters = Collections.unmodifiableList(new ArrayList<Counter>(counters));
+		this.counters = Collections.unmodifiableList(new ArrayList<>(counters));
 		this.samplingProfiler = samplingProfiler;
 		// c'est le collector qui fixe le nom de l'application (avant la lecture des éventuels fichiers)
 		for (final Counter counter : counters) {
@@ -196,7 +196,7 @@ public class Collector { // NOPMD
 	}
 
 	public List<CounterRequestContext> getRootCurrentContexts(List<Counter> newParentCounters) {
-		final List<CounterRequestContext> rootCurrentContexts = new ArrayList<CounterRequestContext>();
+		final List<CounterRequestContext> rootCurrentContexts = new ArrayList<>();
 		for (final Counter counter : counters) {
 			if (counter.isDisplayed()) {
 				// a priori, les contextes root courants sont dans le compteur http
@@ -205,8 +205,8 @@ public class Collector { // NOPMD
 			}
 		}
 		if (rootCurrentContexts.size() > 1) {
-			Collections.sort(rootCurrentContexts, Collections
-					.reverseOrder(new CounterRequestContextComparator(System.currentTimeMillis())));
+			rootCurrentContexts
+					.sort(new CounterRequestContextComparator(System.currentTimeMillis()));
 
 			CounterRequestContext.replaceParentCounters(rootCurrentContexts, newParentCounters);
 		}
@@ -215,6 +215,10 @@ public class Collector { // NOPMD
 
 	public long getLastCollectDuration() {
 		return lastCollectDuration;
+	}
+
+	public Throwable getLastCollectorException() {
+		return lastCollectorException;
 	}
 
 	public long getEstimatedMemorySize() {
@@ -241,10 +245,10 @@ public class Collector { // NOPMD
 
 	public List<Counter> getRangeCounters(Range range) throws IOException {
 		if (range.getPeriod() == Period.TOUT) {
-			return new ArrayList<Counter>(counters);
+			return new ArrayList<>(counters);
 		}
 		final Collection<Counter> currentDayCounters = dayCountersByCounter.values();
-		final List<Counter> result = new ArrayList<Counter>(currentDayCounters.size());
+		final List<Counter> result = new ArrayList<>(currentDayCounters.size());
 		for (final Counter dayCounter : currentDayCounters) {
 			final Counter counter = getRangeCounter(range, dayCounter);
 			result.add(counter);
@@ -281,14 +285,8 @@ public class Collector { // NOPMD
 	}
 
 	public List<Counter> getRangeCountersToBeDisplayed(Range range) throws IOException {
-		final List<Counter> result = new ArrayList<Counter>(getRangeCounters(range));
-		final Iterator<Counter> it = result.iterator();
-		while (it.hasNext()) {
-			final Counter counter = it.next();
-			if (!counter.isDisplayed() || counter.isJobCounter()) {
-				it.remove();
-			}
-		}
+		final List<Counter> result = new ArrayList<>(getRangeCounters(range));
+		result.removeIf(counter -> !counter.isDisplayed() || counter.isJobCounter());
 		return Collections.unmodifiableList(result);
 	}
 
@@ -313,7 +311,7 @@ public class Collector { // NOPMD
 			collectWithoutErrors(Collections.singletonList(javaInformations));
 		} catch (final Throwable t) { // NOPMD
 			// include cause in message for debugging logs in the report
-			LOG.warn("exception while collecting data: " + t.toString(), t);
+			LOG.warn("exception while collecting data: " + t, t);
 		}
 	}
 
@@ -322,9 +320,11 @@ public class Collector { // NOPMD
 		final long start = System.currentTimeMillis();
 		try {
 			estimatedMemorySize = collect(javaInformationsList);
+			lastCollectorException = null;
 		} catch (final Throwable t) { // NOPMD
+			lastCollectorException = t;
 			// include cause in message for debugging logs in the report
-			LOG.warn("exception while collecting data: " + t.toString(), t);
+			LOG.warn("exception while collecting data: " + t, t);
 		}
 		// note : on n'inclue pas "new JavaInformations" de collectLocalContextWithoutErrors
 		// dans la durée de la collecte mais il est inférieur à 1 ms (sans bdd)
@@ -434,6 +434,7 @@ public class Collector { // NOPMD
 		double systemLoadAverage = 0;
 		long unixOpenFileDescriptorCount = 0;
 		long freeDiskSpaceInTemp = Long.MAX_VALUE;
+		long usableDiskSpaceInTemp = Long.MAX_VALUE;
 		double systemCpuLoad = 0;
 
 		for (final JavaInformations javaInformations : javaInformationsList) {
@@ -461,11 +462,11 @@ public class Collector { // NOPMD
 			// que sur linx ou unix
 			unixOpenFileDescriptorCount = add(javaInformations.getUnixOpenFileDescriptorCount(),
 					unixOpenFileDescriptorCount);
-			if (javaInformations.getFreeDiskSpaceInTemp() >= 0) {
-				// la valeur retenue est le minimum entre les serveurs
-				freeDiskSpaceInTemp = Math.min(javaInformations.getFreeDiskSpaceInTemp(),
-						freeDiskSpaceInTemp);
-			}
+			// la valeur retenue est le minimum entre les serveurs
+			freeDiskSpaceInTemp = Math.min(javaInformations.getFreeDiskSpaceInTemp(),
+					freeDiskSpaceInTemp);
+			usableDiskSpaceInTemp = Math.min(javaInformations.getUsableDiskSpaceInTemp(),
+					usableDiskSpaceInTemp);
 			systemCpuLoad = add(javaInformations.getSystemCpuLoad(), systemCpuLoad);
 		}
 
@@ -483,7 +484,7 @@ public class Collector { // NOPMD
 			this.gcTimeMillis = garbageCollectionTimeMillis;
 		}
 
-		final Map<String, Double> otherJRobinsValues = new LinkedHashMap<String, Double>();
+		final Map<String, Double> otherJRobinsValues = new LinkedHashMap<>();
 		otherJRobinsValues.put("threadCount", (double) threadCount);
 		otherJRobinsValues.put("loadedClassesCount", (double) loadedClassesCount);
 		otherJRobinsValues.put("usedBufferedMemory", (double) usedBufferedMemory);
@@ -515,6 +516,9 @@ public class Collector { // NOPMD
 
 		if (freeDiskSpaceInTemp != Long.MAX_VALUE) {
 			addJRobinValue(getOtherJRobin("Free_disk_space"), freeDiskSpaceInTemp);
+		}
+		if (usableDiskSpaceInTemp != Long.MAX_VALUE) {
+			addJRobinValue(getOtherJRobin("Usable_disk_space"), usableDiskSpaceInTemp);
 		}
 
 		// on pourrait collecter la valeur 100 dans jrobin pour qu'il fasse la moyenne
@@ -595,6 +599,8 @@ public class Collector { // NOPMD
 		if (getCounterByName(Counter.BUILDS_COUNTER_NAME) != null) {
 			addJRobinValue(getCounterJRobin("runningBuilds"), JdbcWrapper.getRunningBuildCount());
 			addJRobinValue(getCounterJRobin("buildQueueLength"), JdbcWrapper.getBuildQueueLength());
+			addJRobinValue(getCounterJRobin("buildQueueWaiting"),
+					JdbcWrapper.getBuildQueueWaitingDurationsSum() / 1000d);
 		}
 	}
 
@@ -769,7 +775,7 @@ public class Collector { // NOPMD
 		if (requests.size() <= maxRequestsCount) {
 			return requests;
 		}
-		final List<CounterRequest> result = new ArrayList<CounterRequest>(requests);
+		final List<CounterRequest> result = new ArrayList<>(requests);
 		for (final CounterRequest request : requests) {
 			if (result.size() > maxRequestsCount && request.getHits() < 10) {
 				// Si le nombre de requêtes est supérieur à 10000
@@ -780,7 +786,6 @@ public class Collector { // NOPMD
 				// différentes en éliminant celles ayant moins de 10 hits.
 				removeRequest(counter, request);
 				result.remove(request);
-				continue;
 			}
 		}
 		while (result.size() > maxRequestsCount && !result.isEmpty()) {
@@ -847,7 +852,7 @@ public class Collector { // NOPMD
 		} else {
 			lastErrorTime = dayErrors.get(dayErrors.size() - 1).getTime();
 		}
-		final List<CounterError> errorsOfDay = new ArrayList<CounterError>();
+		final List<CounterError> errorsOfDay = new ArrayList<>();
 		for (final CounterError error : errors) {
 			// il peut arriver de manquer une erreur dans l'affichage par jour
 			// si on récupère la liste et qu'il y a une nouvelle erreur dans la même ms
@@ -872,7 +877,7 @@ public class Collector { // NOPMD
 		return dayCounter;
 	}
 
-	void deleteObsoleteFiles() throws IOException {
+	void deleteObsoleteFiles() {
 		final long rrdDiskUsage = CounterStorage.deleteObsoleteCounterFiles(getApplication());
 		final long serGzDiskUsage = JRobin.deleteObsoleteJRobinFiles(getApplication());
 		diskUsage = rrdDiskUsage + serGzDiskUsage;
@@ -951,7 +956,7 @@ public class Collector { // NOPMD
 	}
 
 	private Collection<JRobin> getDisplayedJRobins(Collection<JRobin> jrobins) {
-		final List<JRobin> displayedJRobins = new ArrayList<JRobin>(jrobins.size());
+		final List<JRobin> displayedJRobins = new ArrayList<>(jrobins.size());
 		for (final JRobin jrobin : jrobins) {
 			final String jrobinName = jrobin.getName();
 			boolean displayed = true;

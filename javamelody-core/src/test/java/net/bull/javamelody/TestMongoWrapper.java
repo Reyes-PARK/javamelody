@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -24,7 +24,7 @@ import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
 import org.bson.Document;
 import org.bson.codecs.configuration.CodecRegistry;
 import org.junit.Before;
@@ -45,13 +45,12 @@ public class TestMongoWrapper {
 	}
 
 	/** Test. */
-	@SuppressWarnings("unchecked")
 	@Test
 	public void testCreateDatabaseProxy() {
 		try {
 			Class.forName("com.mongodb.ReadPreference");
 		} catch (final ClassNotFoundException e) {
-			Logger.getRootLogger().info(e.toString());
+			LogManager.getRootLogger().info(e.toString());
 			// si mongodb-driver-core n'est pas disponible dans le classpath (test depuis Ant),
 			// on ne peut pas exécuter ce test
 			return;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -55,14 +55,14 @@ public class HtmlCacheInformationsReport extends HtmlAbstractReport {
 		}
 		if (systemActionsEnabled) {
 			writeln("<a href='?action=clear_caches" + getCsrfTokenUrlPart()
-					+ "' onclick=\"javascript:return confirm('"
-					+ getStringForJavascript("confirm_purge_caches") + "');\">");
+					+ "' class='confirm' data-confirm='"
+					+ htmlEncodeButNotSpaceAndNewLine(getString("confirm_purge_caches")) + "'>");
 			writeln("<img src='?resource=user-trash.png' width='18' height='18' alt=\"#Purge_caches#\" /> #Purge_caches#</a>");
 			writeln("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 		}
 		// writeDirectly pour éviter traduction car # dans l'url
 		writeDirectly(
-				"<a href='http://ehcache.org/apidocs/2.9/net/sf/ehcache/config/CacheConfiguration.html#field_summary'");
+				"<a href='http://www.ehcache.org/apidocs/2.9/net/sf/ehcache/config/CacheConfiguration.html#field_summary'");
 		writeln("target='_blank'>Configuration reference</a></div>");
 	}
 
@@ -77,9 +77,9 @@ public class HtmlCacheInformationsReport extends HtmlAbstractReport {
 		write("<th class='sorttable_numeric'>#Nb_objets_sur_disque#</th>");
 		if (hitsRatioEnabled) {
 			write("<th class='sorttable_numeric'>");
-			write(getString("Efficacite_cache_memoire").replaceAll("\n", "<br/>"));
+			write(getString("Efficacite_cache_memoire").replace("\n", "<br/>"));
 			write("</th><th class='sorttable_numeric'>");
-			write(getString("Efficacite_cache").replaceAll("\n", "<br/>"));
+			write(getString("Efficacite_cache").replace("\n", "<br/>"));
 			write("</th>");
 		}
 		if (configurationEnabled) {
@@ -130,12 +130,12 @@ public class HtmlCacheInformationsReport extends HtmlAbstractReport {
 
 		if (systemActionsEnabled) {
 			write("<td align='center' class='noPrint'>");
-			final String confirmClearCache = javascriptEncode(
+			final String confirmClearCache = htmlEncodeButNotSpaceAndNewLine(
 					getFormattedString("confirm_purge_cache", cacheInformations.getName()));
 			// writeDirectly pour ne pas gérer de traductions si le nom contient '#'
 			writeDirectly("<a href='?action=clear_cache&amp;cacheId="
 					+ urlEncode(cacheInformations.getName()) + getCsrfTokenUrlPart()
-					+ "' onclick=\"javascript:return confirm('" + confirmClearCache + "');\">");
+					+ "' class='confirm' data-confirm='" + confirmClearCache + "'>");
 			final String title = htmlEncode(
 					getFormattedString("Purge_cache", cacheInformations.getName()));
 			writeDirectly("<img src='?resource=user-trash.png' width='16' height='16' alt='" + title
@@ -180,7 +180,8 @@ public class HtmlCacheInformationsReport extends HtmlAbstractReport {
 
 	private void writeBackAndRefreshLinksForCache(String cacheId) throws IOException {
 		writeln("<div class='noPrint'>");
-		writeln("<a href='javascript:history.back()'><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
+		writeln("<a class='back' href=''><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
+		writeln("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 		writeDirectly("<a href='?part=cacheKeys&amp;cacheId=" + urlEncode(cacheId) + "'>");
 		writeln("<img src='?resource=action_refresh.png' alt='#Actualiser#'/> #Actualiser#</a>");
 		writeln("</div>");
@@ -193,6 +194,10 @@ public class HtmlCacheInformationsReport extends HtmlAbstractReport {
 			write("<br/>#No_keys#");
 			return;
 		}
+		if (cacheKeys.size() > 20) {
+			writeln("<div align='right'>" + cacheKeys.size() + " #Keys#</div>");
+			writeln("<br/>");
+		}
 		final HtmlTable table = new HtmlTable();
 		table.beginTable(getString("Keys"));
 		write("<th>#Keys#</th>");
@@ -201,7 +206,7 @@ public class HtmlCacheInformationsReport extends HtmlAbstractReport {
 		}
 		final String cacheNameEncoded = urlEncode(cacheInformations.getName());
 		final String csrfTokenUrlPart = getCsrfTokenUrlPart();
-		final String confirmClearCache = javascriptEncode(
+		final String confirmClearCache = htmlEncodeButNotSpaceAndNewLine(
 				getFormattedString("confirm_purge_cache", cacheInformations.getName()));
 		final String title = htmlEncode(
 				getFormattedString("Purge_cache", cacheInformations.getName()));
@@ -213,16 +218,16 @@ public class HtmlCacheInformationsReport extends HtmlAbstractReport {
 				writeDirectly(htmlEncodeButNotSpace(myKey));
 				writeDirectly("</td>");
 				if (systemActionsEnabled) {
-					writeDirectly("<td class='noPrint' style='text-align: center;'>");
+					writeDirectly("<td class='noPrint containingIcon'>");
 					writeDirectly(
 							"<a href='?part=cacheKeys&amp;action=clear_cache_key&amp;cacheId=");
 					writeDirectly(cacheNameEncoded);
 					writeDirectly("&amp;cacheKey=");
 					writeDirectly(urlEncode(myKey));
 					writeDirectly(csrfTokenUrlPart);
-					writeDirectly("' onclick=\"javascript:return confirm('");
+					writeDirectly("' class='confirm' data-confirm='");
 					writeDirectly(confirmClearCache);
-					writeDirectly("');\">");
+					writeDirectly("'>");
 					writeDirectly(
 							"<img src='?resource=user-trash.png' width='16' height='16' alt='");
 					writeDirectly(title);
@@ -234,5 +239,7 @@ public class HtmlCacheInformationsReport extends HtmlAbstractReport {
 			}
 		}
 		table.endTable();
+		writeln("<br/>");
+		writeln("<div align='right'>" + cacheKeys.size() + " #Keys#</div>");
 	}
 }

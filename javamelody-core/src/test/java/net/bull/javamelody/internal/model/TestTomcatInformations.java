@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -24,17 +24,18 @@ import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertNotNull;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.management.JMException;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
-import javax.servlet.ServletContext;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletContext;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.Utils;
 import net.bull.javamelody.internal.common.Parameters;
@@ -75,10 +76,21 @@ public class TestTomcatInformations {
 
 		/** {@inheritDoc} */
 		@Override
+		public Map<Object, Object> getmemoryUsage() {
+			final LinkedHashMap<Object, Object> map = new LinkedHashMap<>();
+			map.put("committed", 1);
+			map.put("init", 10);
+			map.put("max", 100);
+			map.put("used", 1000);
+			return map;
+		}
+
+		/** {@inheritDoc} */
+		@Override
 		public Object gettoStringException() {
 			return new Object() {
-				@Override
 				/** {@inheritDoc} */
+				@Override
 				public String toString() {
 					throw new IllegalStateException("test");
 				}
@@ -108,6 +120,12 @@ public class TestTomcatInformations {
 		 * @return int
 		 */
 		int getmaxThreads();
+
+		/**
+		 * attribut memoryUsage.
+		 * @return MemoryUsage
+		 */
+		Map<Object, Object> getmemoryUsage();
 
 		/**
 		 * attribut currentThreadsBusy.
@@ -255,7 +273,7 @@ public class TestTomcatInformations {
 		assertNotNull("buildTomcatInformationsList",
 				TomcatInformations.buildTomcatInformationsList());
 		final MBeanServer mBeanServer = MBeans.getPlatformMBeanServer();
-		final List<ObjectName> mBeans = new ArrayList<ObjectName>();
+		final List<ObjectName> mBeans = new ArrayList<>();
 		mBeans.add(
 				mBeanServer
 						.registerMBean(new ThreadPool(),
@@ -281,10 +299,10 @@ public class TestTomcatInformations {
 			}
 
 			final Counter counter = new Counter("http", null);
-			final Collector collector = new Collector("test", Arrays.asList(counter));
+			final Collector collector = new Collector("test", List.of(counter));
 			final ServletContext context = createNiceMock(ServletContext.class);
 			expect(context.getServerInfo()).andReturn("Mock").anyTimes();
-			expect(context.getMajorVersion()).andReturn(3).anyTimes();
+			expect(context.getMajorVersion()).andReturn(5).anyTimes();
 			expect(context.getMinorVersion()).andReturn(0).anyTimes();
 			expect(context.getContextPath()).andReturn("/test").anyTimes();
 			replay(context);

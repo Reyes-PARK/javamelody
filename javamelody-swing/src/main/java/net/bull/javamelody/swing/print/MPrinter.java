@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -103,8 +103,8 @@ public abstract class MPrinter {
 		if (text != null && text.startsWith("<html>")) {
 			text = text.replaceFirst("<html>", "");
 			text = text.replaceFirst("<center>", "");
-			text = text.replaceAll("<br/>", "\n");
-			text = text.replaceAll("&nbsp;", " ");
+			text = text.replace("<br/>", "\n");
+			text = text.replace("&nbsp;", " ");
 			text = text.replaceFirst("<font color='#[0-9]*+'>", "");
 		}
 		return text;

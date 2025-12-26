@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -39,6 +39,8 @@ public class SpringDataSourceBeanPostProcessor implements BeanPostProcessor, Pri
 	// l'interface PriorityOrdered place la priorité assez haute dans le contexte Spring
 	// quelle que soit la valeur de order
 	private int order = LOWEST_PRECEDENCE;
+
+	private final Class<?> delegatingDataSourceClass = getDelegatingDataSourceClass();
 
 	/**
 	 * Définit les noms des datasources Spring exclues.
@@ -90,7 +92,8 @@ public class SpringDataSourceBeanPostProcessor implements BeanPostProcessor, Pri
 	public Object postProcessAfterInitialization(Object bean, String beanName) {
 		if (bean instanceof DataSource) {
 			// on ne teste isExcludedDataSource que si on est sur une datasource
-			if (isExcludedDataSource(beanName) || Parameters.isNoDatabase()) {
+			if (isExcludedDataSource(beanName) || Parameters.isNoDatabase()
+					|| isDelegatingDataSourceAndAlreadyProxied(bean, beanName)) {
 				return bean;
 			}
 
@@ -169,5 +172,33 @@ public class SpringDataSourceBeanPostProcessor implements BeanPostProcessor, Pri
 			}
 		};
 		return JdbcWrapper.createProxy(bean, invocationHandler);
+	}
+
+	private boolean isDelegatingDataSourceAndAlreadyProxied(Object bean, String beanName) {
+		// bean instanceof DelegatingDataSource ?
+		// use reflection in case spring-jdbc is not available
+		if (delegatingDataSourceClass != null && delegatingDataSourceClass.isInstance(bean)) {
+			final DataSource targetDataSource;
+			try {
+				targetDataSource = (DataSource) delegatingDataSourceClass
+						.getMethod("getTargetDataSource").invoke(bean);
+			} catch (final Exception e) {
+				// call to ((DelegatingDataSource) bean).getTargetDataSource() is not supposed to fail
+				throw new IllegalStateException(e);
+			}
+			if (JdbcWrapper.isProxyAlready(targetDataSource)) {
+				LOG.debug("Spring delegating datasource excluded: " + beanName);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static Class<?> getDelegatingDataSourceClass() {
+		try {
+			return Class.forName("org.springframework.jdbc.datasource.DelegatingDataSource");
+		} catch (final ClassNotFoundException e) {
+			return null;
+		}
 	}
 }

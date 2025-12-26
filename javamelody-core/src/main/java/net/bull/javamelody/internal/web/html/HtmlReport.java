@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -21,8 +21,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Writer;
 import java.net.URL;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +42,7 @@ import net.bull.javamelody.internal.model.CounterRequestContext;
 import net.bull.javamelody.internal.model.DatabaseInformations;
 import net.bull.javamelody.internal.model.HeapHistogram;
 import net.bull.javamelody.internal.model.HsErrPid;
+import net.bull.javamelody.internal.model.JCacheInformations;
 import net.bull.javamelody.internal.model.JavaInformations;
 import net.bull.javamelody.internal.model.JndiBinding;
 import net.bull.javamelody.internal.model.MBeanNode;
@@ -56,8 +58,6 @@ import net.bull.javamelody.internal.model.SessionInformations;
  * @author Emeric Vernat
  */
 public class HtmlReport extends HtmlAbstractReport {
-	private static final String SCRIPT_BEGIN = "<script type='text/javascript'>";
-	private static final String SCRIPT_END = "</script>";
 	private static final URL THEMED_MONITORING_CSS = HtmlReport.class
 			.getResource("/net/bull/javamelody/resource/themedMonitoring.css");
 	private static final URL THEMED_MONITORING_JS = HtmlReport.class
@@ -104,13 +104,13 @@ public class HtmlReport extends HtmlAbstractReport {
 
 	public void writeLastShutdown() throws IOException {
 		writeHtmlHeader(false, true);
-		htmlCoreReport.toHtml(null, null);
+		htmlCoreReport.toHtml();
 		writeHtmlFooter();
 	}
 
-	public static void writeAddAndRemoveApplicationLinks(String currentApplication, Writer writer)
-			throws IOException {
-		HtmlCoreReport.writeAddAndRemoveApplicationLinks(currentApplication, writer);
+	public static void writeAddAndRemoveApplicationLinks(String currentApplication,
+			Collection<String> applications, Writer writer) throws IOException {
+		HtmlCoreReport.writeAddAndRemoveApplicationLinks(currentApplication, applications, writer);
 	}
 
 	public void writeAllCurrentRequestsAsPart() throws IOException {
@@ -125,7 +125,7 @@ public class HtmlReport extends HtmlAbstractReport {
 			currentRequests = Collections.singletonMap(javaInformations, rootCurrentContexts);
 		} else {
 			currentRequests = collectorServer.collectCurrentRequests(collector.getApplication());
-			final List<CounterRequestContext> allCurrentRequests = new ArrayList<CounterRequestContext>();
+			final List<CounterRequestContext> allCurrentRequests = new ArrayList<>();
 			for (final List<CounterRequestContext> rootCurrentContexts : currentRequests.values()) {
 				allCurrentRequests.addAll(rootCurrentContexts);
 			}
@@ -177,25 +177,37 @@ public class HtmlReport extends HtmlAbstractReport {
 		writeHtmlHeader(false, false);
 	}
 
-	private void writeHtmlHeader(boolean includeSlider, boolean includeCssInline)
+	private void writeHtmlHeader(boolean includeSlider, boolean includeCssAndJsInline)
 			throws IOException {
 		writeln("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">");
 		writeDirectly("<html lang='" + I18N.getCurrentLocale().getLanguage() + "'><head><title>"
 				+ getFormattedString("Monitoring_sur", collector.getApplication()) + "</title>");
 		writeln("");
-		if (includeCssInline) {
+		if (includeCssAndJsInline) {
 			writeln("<style type='text/css'>");
-			final InputStream in = getClass()
-					.getResourceAsStream(Parameters.getResourcePath("monitoring.css"));
-			try {
-				final String monitoringCss = InputOutput.pumpToString(in, Charset.forName("UTF-8"));
+			try (InputStream in = getClass()
+					.getResourceAsStream(Parameters.getResourcePath("monitoring.css"))) {
+				final String monitoringCss = InputOutput.pumpToString(in, StandardCharsets.UTF_8);
 				writeDirectly(monitoringCss);
-			} finally {
-				in.close();
 			}
 			writeln("</style>");
+			writeln("<script type='text/javascript'>");
+			try (InputStream in = getClass()
+					.getResourceAsStream(Parameters.getResourcePath("prototype.js"))) {
+				final String monitoringJs = InputOutput.pumpToString(in, StandardCharsets.UTF_8);
+				writeDirectly(monitoringJs);
+			}
+			try (InputStream in = getClass()
+					.getResourceAsStream(Parameters.getResourcePath("monitoring.js"))) {
+				final String monitoringJs = InputOutput.pumpToString(in, StandardCharsets.UTF_8);
+				writeDirectly(monitoringJs);
+			}
+			writeln("</script>");
 		} else {
 			writeln("<link rel='stylesheet' href='?resource=monitoring.css' type='text/css'/>");
+			// prototype.js nécessaire pour monitoring.js, effects.js et slider.js
+			writeln("<script type='text/javascript' src='?resource=prototype.js'></script>");
+			writeln("<script type='text/javascript' src='?resource=monitoring.js'></script>");
 			if (THEMED_MONITORING_CSS != null) {
 				writeln("<link rel='stylesheet' href='?resource=themedMonitoring.css' type='text/css'/>");
 			}
@@ -204,8 +216,6 @@ public class HtmlReport extends HtmlAbstractReport {
 		writeln("<link type='image/png' rel='shortcut icon' href='?resource=systemmonitor.png' />");
 		writeln("<script type='text/javascript' src='?resource=resizable_tables.js'></script>");
 		writeln("<script type='text/javascript' src='?resource=sorttable.js'></script>");
-		// prototype.js nécessaire pour effects.js et slider.js
-		writeln("<script type='text/javascript' src='?resource=prototype.js'></script>");
 		// Effect slidedown/slideup décrit ici http://madrobby.github.com/scriptaculous/effect-slidedown/
 		writeln("<script type='text/javascript' src='?resource=effects.js'></script>");
 		// open dialog (for java sources), http://www.p51labs.com/lightwindow/
@@ -217,56 +227,17 @@ public class HtmlReport extends HtmlAbstractReport {
 			writeln("<script type='text/javascript' src='?resource=themedMonitoring.js'></script>");
 		}
 		writeln("<script type='text/javascript' src='?resource=customizableMonitoring.js'></script>");
-		writeJavaScript();
 		writeln("</head><body>");
 	}
 
 	public void writeHtmlFooter() throws IOException {
 		final String analyticsId = Parameter.ANALYTICS_ID.getValue();
 		if (analyticsId != null && !"disabled".equals(analyticsId)) {
-			writeDirectly(SCRIPT_BEGIN);
 			writeDirectly(
-					"var gaJsHost = (('https:' == document.location.protocol) ? 'https://ssl.' : 'http://www.');\n");
-			writeDirectly(
-					"document.write(unescape(\"%3Cscript src='\" + gaJsHost + \"google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E\"));\n");
-			writeDirectly(SCRIPT_END);
-			writeDirectly(SCRIPT_BEGIN);
-			writeDirectly(" try{\n");
-			writeDirectly("var pageTracker = _gat._getTracker('" + analyticsId + "');\n");
-			writeDirectly("pageTracker._trackPageview();\n");
-			writeDirectly("} catch(err) {}\n");
-			writeDirectly(SCRIPT_END);
-			writeDirectly("\n");
+					"<script type=\"text/javascript\" src=\"https://ssl.google-analytics.com/ga.js\" async=\"true\" id=\"ga-js\" data-analytics-id=\""
+							+ htmlEncodeButNotSpace(analyticsId) + "\"></script>");
 		}
 		writeln("</body></html>");
-	}
-
-	private void writeJavaScript() throws IOException {
-		writeln(SCRIPT_BEGIN);
-		writeln("function showHide(id){");
-		writeln("  if (document.getElementById(id).style.display=='none') {");
-		writeln("    if (document.getElementById(id + 'Img') != null) {");
-		writeln("      document.getElementById(id + 'Img').src='?resource=bullets/minus.png';");
-		writeln("    }");
-		writeln("    try {");
-		writeln("      Effect.SlideDown(id, { duration: 0.5 });");
-		writeln("    } catch (e) {");
-		// si effects.js n'est pas chargé, par exemple dans last_shutdown.html
-		writeln("      document.getElementById(id).style.display='inline';");
-		writeln("    }");
-		writeln("  } else {");
-		writeln("    if (document.getElementById(id + 'Img') != null) {");
-		writeln("      document.getElementById(id + 'Img').src='?resource=bullets/plus.png';");
-		writeln("    }");
-		writeln("    try {");
-		writeln("      Effect.SlideUp(id, { duration: 0.5 });");
-		writeln("    } catch (e) {");
-		// si effects.js n'est pas chargé, par exemple dans last_shutdown.html
-		writeln("      document.getElementById(id).style.display='none';");
-		writeln("    }");
-		writeln("  }");
-		writeln("}");
-		writeln(SCRIPT_END);
 	}
 
 	public void writeMessageIfNotNull(String message, String partToRedirectTo) throws IOException {
@@ -344,8 +315,7 @@ public class HtmlReport extends HtmlAbstractReport {
 			throws IOException {
 		assert processesByTitle != null;
 		writeHtmlHeader();
-		new HtmlProcessInformationsReport(new ArrayList<ProcessInformations>(), getWriter())
-				.writeLinks();
+		new HtmlProcessInformationsReport(new ArrayList<>(), getWriter()).writeLinks();
 		for (final Map.Entry<String, List<ProcessInformations>> entry : processesByTitle
 				.entrySet()) {
 			final String title = entry.getKey();
@@ -397,7 +367,7 @@ public class HtmlReport extends HtmlAbstractReport {
 	public void writeMBeans(Map<String, List<MBeanNode>> mbeansByTitle) throws IOException {
 		assert mbeansByTitle != null;
 		writeHtmlHeader();
-		new HtmlMBeansReport(new ArrayList<MBeanNode>(), getWriter()).writeLinks();
+		new HtmlMBeansReport(new ArrayList<>(), getWriter()).writeLinks();
 		for (final Map.Entry<String, List<MBeanNode>> entry : mbeansByTitle.entrySet()) {
 			final String title = entry.getKey();
 			final List<MBeanNode> nodes = entry.getValue();
@@ -412,17 +382,32 @@ public class HtmlReport extends HtmlAbstractReport {
 	public void writeCacheWithKeys(String cacheId, CacheInformations cacheInformations,
 			String message, String cacheKeyPart, boolean withoutHeaders) throws IOException {
 		assert cacheId != null;
-		if (cacheInformations != null) {
-			final HtmlCacheInformationsReport htmlCacheInformationsReport = new HtmlCacheInformationsReport(
-					Collections.singletonList(cacheInformations), getWriter());
-			if (withoutHeaders) {
-				htmlCacheInformationsReport.writeCacheWithKeys(cacheId, withoutHeaders);
-			} else {
-				writeHtmlHeader();
-				htmlCacheInformationsReport.writeCacheWithKeys(cacheId, withoutHeaders);
-				writeHtmlFooter();
-				writeMessageIfNotNull(message, cacheKeyPart);
-			}
+		assert cacheInformations != null;
+		final HtmlCacheInformationsReport htmlCacheInformationsReport = new HtmlCacheInformationsReport(
+				Collections.singletonList(cacheInformations), getWriter());
+		if (withoutHeaders) {
+			htmlCacheInformationsReport.writeCacheWithKeys(cacheId, withoutHeaders);
+		} else {
+			writeHtmlHeader();
+			htmlCacheInformationsReport.writeCacheWithKeys(cacheId, withoutHeaders);
+			writeHtmlFooter();
+			writeMessageIfNotNull(message, cacheKeyPart);
+		}
+	}
+
+	public void writeJCacheWithKeys(String cacheId, JCacheInformations jcacheInformations,
+			String message, String cacheKeyPart, boolean withoutHeaders) throws IOException {
+		assert cacheId != null;
+		assert jcacheInformations != null;
+		final HtmlJCacheInformationsReport htmlJCacheInformationsReport = new HtmlJCacheInformationsReport(
+				Collections.singletonList(jcacheInformations), getWriter());
+		if (withoutHeaders) {
+			htmlJCacheInformationsReport.writeJCacheWithKeys(cacheId, withoutHeaders);
+		} else {
+			writeHtmlHeader();
+			htmlJCacheInformationsReport.writeJCacheWithKeys(cacheId, withoutHeaders);
+			writeHtmlFooter();
+			writeMessageIfNotNull(message, cacheKeyPart);
 		}
 	}
 
@@ -432,6 +417,14 @@ public class HtmlReport extends HtmlAbstractReport {
 		final HtmlHsErrPidReport htmlHsErrPidReport = new HtmlHsErrPidReport(hsErrPidList,
 				getWriter());
 		htmlHsErrPidReport.toHtml();
+		writeHtmlFooter();
+	}
+
+	public void writeHashPassword(String algorithm, String password) throws IOException {
+		writeHtmlHeader();
+		final HtmlHashPasswordReport htmlHashPasswordReport = new HtmlHashPasswordReport(
+				getWriter());
+		htmlHashPasswordReport.writeHashPassword(algorithm, password);
 		writeHtmlFooter();
 	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -89,7 +89,7 @@ public class PdfRequestAndGraphDetailReport extends PdfAbstractTableReport {
 	}
 
 	private Map<String, CounterRequest> mapAllRequestsById() {
-		final Map<String, CounterRequest> result = new HashMap<String, CounterRequest>();
+		final Map<String, CounterRequest> result = new HashMap<>();
 		for (final Counter counter : counters) {
 			for (final CounterRequest aRequest : counter.getRequests()) {
 				result.put(aRequest.getId(), aRequest);
@@ -176,7 +176,7 @@ public class PdfRequestAndGraphDetailReport extends PdfAbstractTableReport {
 	}
 
 	private List<String> createHeaders() {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getString("Requete"));
 		final boolean hasChildren = !request.getChildRequestsExecutionsByRequestId().isEmpty();
 		if (hasChildren) {

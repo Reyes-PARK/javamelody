@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -40,10 +40,8 @@ public class SpringTestFacadeImpl implements SpringTestFacade {
 	public Date nowWithSql() throws SQLException {
 		//		final javax.sql.DataSource dataSource = (javax.sql.DataSource) new javax.naming.InitialContext()
 		//				.lookup("java:comp/env/jdbc/TestDB");
-		final ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(
-				new String[] { "net/bull/javamelody/monitoring-spring.xml",
-						"spring-context.xml", });
-		try {
+		try (ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(
+				"net/bull/javamelody/monitoring-spring.xml", "spring-context.xml")) {
 			final javax.sql.DataSource dataSource = (javax.sql.DataSource) context
 					.getBean("dataSource");
 			final java.sql.Connection connection = dataSource.getConnection();
@@ -52,8 +50,7 @@ public class SpringTestFacadeImpl implements SpringTestFacade {
 				// test pour explain plan en oracle
 				//			final PreparedStatement statement = connection
 				//					.prepareStatement("select * from v$session where user# = ?");
-				final Statement statement = connection.createStatement();
-				try {
+				try (Statement statement = connection.createStatement()) {
 					//				statement.setInt(1, 36);
 					//				statement.executeQuery();
 
@@ -63,15 +60,11 @@ public class SpringTestFacadeImpl implements SpringTestFacade {
 					for (int i = 0; i < 5; i++) {
 						statement.execute("call sleep(.02)");
 					}
-				} finally {
-					statement.close();
 				}
 			} finally {
 				connection.rollback();
 				connection.close();
 			}
-		} finally {
-			context.close();
 		}
 
 		return new Date();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -84,7 +84,7 @@ public class MCsvLocalWriter extends MCsvWriter {
 		final String charset = System.getProperty("file.encoding");
 		final Writer out = new OutputStreamWriter(outputStream, charset);
 
-		final String eol = System.getProperty("line.separator");
+		final String eol = System.lineSeparator();
 
 		// titres des colonnes
 		writeCsvHeader(table, out, csvSeparator);
@@ -100,7 +100,7 @@ public class MCsvLocalWriter extends MCsvWriter {
 				} else {
 					text = getTextAt(table, k, i);
 					text = formatCsv(text, csvSeparator);
-					if (value instanceof Number && text != null) {
+					if (value instanceof Number) {
 						// en France, le caractère de séparation des milliers est pour Java un espace insécable (0xA0)
 						// et non un espace standard (0x20), mais Excel XP reconnaît l'espace standard dans les nombres
 						// mais ne reconnaît pas l'espace insécable et interprète alors les nombres comme du texte

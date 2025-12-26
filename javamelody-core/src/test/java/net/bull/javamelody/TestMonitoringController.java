@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -21,17 +21,17 @@ import static org.easymock.EasyMock.createNiceMock;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
 import static org.easymock.EasyMock.verify;
+import static org.junit.Assert.assertNotNull;
 
-import java.util.Arrays;
-
-import javax.servlet.ServletContext;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
+import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import net.bull.javamelody.internal.common.HttpParameter;
 import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.model.Collector;
@@ -50,8 +50,8 @@ public class TestMonitoringController {
 	public void setUp() {
 		Utils.initialize();
 		final ServletContext context = createNiceMock(ServletContext.class);
-		expect(context.getMajorVersion()).andReturn(2).anyTimes();
-		expect(context.getMinorVersion()).andReturn(5).anyTimes();
+		expect(context.getMajorVersion()).andReturn(5).anyTimes();
+		expect(context.getMinorVersion()).andReturn(0).anyTimes();
 		expect(context.getServletContextName()).andReturn("test webapp").anyTimes();
 		expect(context.getServerInfo()).andReturn("mockJetty").anyTimes();
 		expect(context.getContextPath()).andReturn("/test").anyTimes();
@@ -63,7 +63,7 @@ public class TestMonitoringController {
 	@Test
 	public void testWriteHtmlToLastShutdownFile() {
 		final Counter sqlCounter = new Counter("sql", "db.png");
-		final Collector collector = new Collector("test", Arrays.asList(sqlCounter));
+		final Collector collector = new Collector("test", List.of(sqlCounter));
 		new MonitoringController(collector, null).writeHtmlToLastShutdownFile();
 	}
 
@@ -71,7 +71,7 @@ public class TestMonitoringController {
 	@Test
 	public void testAddPdfContentTypeAndDisposition() {
 		final Counter sqlCounter = new Counter("sql", "db.png");
-		final Collector collector = new Collector("test collector", Arrays.asList(sqlCounter));
+		final Collector collector = new Collector("test collector", List.of(sqlCounter));
 		final HttpServletRequest httpRequest = createNiceMock(HttpServletRequest.class);
 		final HttpServletResponse httpResponse = createNiceMock(HttpServletResponse.class);
 		expect(httpRequest.getHeader("user-agent")).andReturn("Firefox").anyTimes();
@@ -96,16 +96,41 @@ public class TestMonitoringController {
 	/** Test. */
 	@Test
 	public void testCheckCsrfToken() {
-		final HttpServletRequest httpRequest = createNiceMock(HttpServletRequest.class);
-		final HttpSession httpSession = createNiceMock(HttpSession.class);
+		final HttpServletRequest httpRequest0 = createNiceMock(HttpServletRequest.class);
+		replay(httpRequest0);
+		try {
+			MonitoringController.checkCsrfToken(httpRequest0);
+		} catch (final Exception e) {
+			assertNotNull("e", e);
+		}
+		verify(httpRequest0);
+
+		final HttpServletRequest httpRequest1 = createNiceMock(HttpServletRequest.class);
+		final HttpSession httpSession1 = createNiceMock(HttpSession.class);
 		final String token = "dummy token";
-		expect(HttpParameter.TOKEN.getParameterFrom(httpRequest)).andReturn(token);
-		expect(httpRequest.getSession(false)).andReturn(httpSession);
-		expect(httpSession.getAttribute(SessionListener.CSRF_TOKEN_SESSION_NAME)).andReturn(token);
-		replay(httpRequest);
-		replay(httpSession);
-		MonitoringController.checkCsrfToken(httpRequest);
-		verify(httpRequest);
-		verify(httpSession);
+		expect(HttpParameter.TOKEN.getParameterFrom(httpRequest1)).andReturn(token);
+		expect(httpRequest1.getSession(false)).andReturn(httpSession1);
+		expect(httpSession1.getAttribute(SessionListener.CSRF_TOKEN_SESSION_NAME)).andReturn(token);
+		replay(httpRequest1);
+		replay(httpSession1);
+		MonitoringController.checkCsrfToken(httpRequest1);
+		verify(httpRequest1);
+		verify(httpSession1);
+
+		final HttpServletRequest httpRequest2 = createNiceMock(HttpServletRequest.class);
+		final HttpSession httpSession2 = createNiceMock(HttpSession.class);
+		expect(HttpParameter.TOKEN.getParameterFrom(httpRequest2)).andReturn(token);
+		expect(httpRequest2.getSession(false)).andReturn(httpSession2);
+		expect(httpSession2.getAttribute(SessionListener.CSRF_TOKEN_SESSION_NAME))
+				.andReturn("unknown");
+		replay(httpRequest2);
+		replay(httpSession2);
+		try {
+			MonitoringController.checkCsrfToken(httpRequest2);
+		} catch (final Exception e) {
+			assertNotNull("e", e);
+		}
+		verify(httpRequest2);
+		verify(httpSession2);
 	}
 }

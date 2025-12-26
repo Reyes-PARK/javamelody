@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -67,7 +67,7 @@ public class JnlpPage {
 		println("      <j2se version='1.7+' max-heap-size='300m'/>");
 		final String jarFileUrl = getJarFileUrl();
 		println("      <jar href='" + jarFileUrl + "' />");
-		final Map<String, Object> properties = new LinkedHashMap<String, Object>();
+		final Map<String, Object> properties = new LinkedHashMap<>();
 		properties.put("javamelody.application", collector.getApplication());
 		properties.put("javamelody.collectorServer", collectorServer != null);
 		final String url;
@@ -115,7 +115,7 @@ public class JnlpPage {
 			//					+ Parameters.JAVAMELODY_VERSION + ".jar";
 		} else {
 			// TODO publish newer javamelody-swing files on github and review code above
-			jarFileUrl = "https://github.com/javamelody/javamelody/releases/download/javamelody-core-1.49.0/javamelody-swing-1.74.0.jar";
+			jarFileUrl = "https://github.com/javamelody/javamelody/releases/download/javamelody-core-1.49.0/javamelody-swing-1.88.0.jar";
 		}
 		return jarFileUrl;
 	}

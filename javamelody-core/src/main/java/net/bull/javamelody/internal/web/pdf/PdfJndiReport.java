@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -69,7 +69,7 @@ class PdfJndiReport extends PdfAbstractTableReport {
 	}
 
 	private List<String> createHeaders() {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getString("Nom"));
 		headers.add(getString("Type"));
 		headers.add(getString("Value"));
@@ -87,8 +87,7 @@ class PdfJndiReport extends PdfAbstractTableReport {
 			final Image image = getFolderImage();
 			final Phrase phrase = new Phrase("", cellFont);
 			phrase.add(new Chunk(image, 0, 0));
-			phrase.add(" ");
-			phrase.add(name);
+			phrase.add(new Chunk(" " + name));
 			addCell(phrase);
 		} else {
 			addCell(name);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -27,6 +27,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Locale;
@@ -81,8 +82,7 @@ class Graphite extends MetricsPublisher {
 			if (index != -1) {
 				// we could use new URI("socket://" + graphiteAddress).getHost() and getPort() to parse the address
 				address = graphiteAddress.substring(0, index);
-				port = Integer
-						.parseInt(graphiteAddress.substring(index + 1, graphiteAddress.length()));
+				port = Integer.parseInt(graphiteAddress.substring(index + 1));
 			} else {
 				address = graphiteAddress;
 				port = DEFAULT_GRAPHITE_PORT;
@@ -93,7 +93,7 @@ class Graphite extends MetricsPublisher {
 					+ hostName.replace('.', '_') + '.').replace(SEPARATOR, '_');
 			try {
 				return new Graphite(SocketFactory.getDefault(), InetAddress.getByName(address),
-						port, Charset.forName("UTF-8"), prefix);
+						port, StandardCharsets.UTF_8, prefix);
 			} catch (final UnknownHostException e) {
 				throw new IllegalArgumentException("Invalid host: " + address, e);
 			}
@@ -117,12 +117,9 @@ class Graphite extends MetricsPublisher {
 	public synchronized void send() throws IOException {
 		try {
 			bufferWriter.flush();
-			final Socket socket = createSocket();
-			try {
+			try (Socket socket = createSocket()) {
 				buffer.writeTo(socket.getOutputStream());
 				checkNoReturnedData(socket);
-			} finally {
-				socket.close();
 			}
 		} catch (final ConnectException e) {
 			throw new IOException("Error connecting to Graphite at " + address + ':' + port, e);
@@ -157,7 +154,8 @@ class Graphite extends MetricsPublisher {
 				final String msg = "Data returned by graphite server when expecting no response! "
 						+ "Probably aimed at wrong socket or server. Make sure you "
 						+ "are publishing to the data port, not the dashboard port. First " + read
-						+ " bytes of response: " + new String(bytes, 0, read, "UTF-8");
+						+ " bytes of response: "
+						+ new String(bytes, 0, read, StandardCharsets.UTF_8);
 				LOG.warn(msg, new IOException(msg));
 			}
 		}

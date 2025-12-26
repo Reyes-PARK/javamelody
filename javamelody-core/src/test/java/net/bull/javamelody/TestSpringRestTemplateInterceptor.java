@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,12 +17,14 @@
  */
 package net.bull.javamelody;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
+import org.springframework.core.Ordered;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -47,9 +49,8 @@ public class TestSpringRestTemplateInterceptor {
 	public void testSpringAOP() {
 		final Counter springCounter = MonitoringProxy.getSpringCounter();
 		springCounter.clear();
-		final ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(
-				new String[] { MONITORING_CONTEXT_FILENAME, TEST_CONTEXT_FILENAME, });
-		try {
+		try (ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(
+				MONITORING_CONTEXT_FILENAME, TEST_CONTEXT_FILENAME)) {
 			final RestTemplate restTemplate = context.getBean(RestTemplate.class);
 			final String url = "https://gturnquist-quoters.cfapps.io/api/random";
 			springCounter.setDisplayed(false);
@@ -70,8 +71,13 @@ public class TestSpringRestTemplateInterceptor {
 			} catch (final RestClientException e) {
 				assertSame("requestsCount", 1, springCounter.getRequestsCount());
 			}
-		} finally {
-			context.close();
+
+			final SpringRestTemplateBeanPostProcessor springRestTemplateBeanPostProcessor = context
+					.getBean(SpringRestTemplateBeanPostProcessor.class);
+			assertEquals("order", Ordered.LOWEST_PRECEDENCE,
+					springRestTemplateBeanPostProcessor.getOrder());
+			springRestTemplateBeanPostProcessor.setOrder(1);
+			assertEquals("order", 1, springRestTemplateBeanPostProcessor.getOrder());
 		}
 	}
 }

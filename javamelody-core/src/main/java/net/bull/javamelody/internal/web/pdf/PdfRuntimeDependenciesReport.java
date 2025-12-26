@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -19,7 +19,7 @@ package net.bull.javamelody.internal.web.pdf;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -90,12 +90,12 @@ class PdfRuntimeDependenciesReport extends PdfAbstractReport {
 	Map<String, Map<String, Integer>> getRuntimeDependencies() {
 		final Map<String, Set<CounterRequest>> methodsCalledByCallerBeans = getMethodsCalledByCallerBeans();
 
-		final Map<String, Map<String, Integer>> result = new HashMap<String, Map<String, Integer>>();
+		final Map<String, Map<String, Integer>> result = new HashMap<>();
 		for (final Map.Entry<String, Set<CounterRequest>> entry : methodsCalledByCallerBeans
 				.entrySet()) {
 			final String callerBean = entry.getKey();
 			final Set<CounterRequest> childRequests = entry.getValue();
-			final Map<String, Integer> nbMethodsCalledByCalledBean = new HashMap<String, Integer>();
+			final Map<String, Integer> nbMethodsCalledByCalledBean = new HashMap<>();
 			for (final CounterRequest childRequest : childRequests) {
 				final String calledBean = getClassNameFromRequest(childRequest);
 				if (callerBean.equals(calledBean)) {
@@ -127,14 +127,14 @@ class PdfRuntimeDependenciesReport extends PdfAbstractReport {
 	private Map<String, Set<CounterRequest>> getMethodsCalledByCallerBeans() {
 		assert counter.isBusinessFacadeCounter();
 		final List<CounterRequest> requests = counter.getRequests();
-		final Map<String, CounterRequest> requestsById = new HashMap<String, CounterRequest>();
+		final Map<String, CounterRequest> requestsById = new HashMap<>();
 		for (final CounterRequest request : requests) {
 			requestsById.put(request.getId(), request);
 		}
 
 		// on compte le nombre de méthodes différentes appelées depuis un bean vers un autre bean
 		// et non le nombre d'exécutions et non plus le nombre d'appels de méthodes
-		final Map<String, Set<CounterRequest>> methodsCalledByCallerBeans = new HashMap<String, Set<CounterRequest>>();
+		final Map<String, Set<CounterRequest>> methodsCalledByCallerBeans = new HashMap<>();
 		for (final CounterRequest request : requests) {
 			final Set<String> childRequestIds = request.getChildRequestsExecutionsByRequestId()
 					.keySet();
@@ -145,11 +145,8 @@ class PdfRuntimeDependenciesReport extends PdfAbstractReport {
 			// c'est un Set donc on ne compte une méthode 'a' appelée depuis une classe qu'une seule fois
 			// même si elle est appelée deux fois depuis la même classe
 			// ou même à un seul endroit mais avec des exécutions dans une boucle
-			Set<CounterRequest> childRequests = methodsCalledByCallerBeans.get(callerBean);
-			if (childRequests == null) {
-				childRequests = new HashSet<CounterRequest>();
-				methodsCalledByCallerBeans.put(callerBean, childRequests);
-			}
+			Set<CounterRequest> childRequests = methodsCalledByCallerBeans
+					.computeIfAbsent(callerBean, k -> new HashSet<>());
 			for (final String childRequestId : childRequestIds) {
 				// on ne regarde que les requêtes du même counter
 				// (pas sql, et pas guice si on est dans spring)
@@ -176,7 +173,7 @@ class PdfRuntimeDependenciesReport extends PdfAbstractReport {
 
 	private static double getStandardDeviation(
 			Map<String, Map<String, Integer>> runtimeDependencies) {
-		final List<Integer> values = new ArrayList<Integer>();
+		final List<Integer> values = new ArrayList<>();
 		int sum = 0;
 		for (final Map<String, Integer> beanDependencies : runtimeDependencies.values()) {
 			for (final Integer value : beanDependencies.values()) {
@@ -194,12 +191,12 @@ class PdfRuntimeDependenciesReport extends PdfAbstractReport {
 	}
 
 	private List<String> getCalledBeans(Map<String, Map<String, Integer>> runtimeDependencies) {
-		final Set<String> calledBeansSet = new HashSet<String>();
+		final Set<String> calledBeansSet = new HashSet<>();
 		for (final Map<String, Integer> values : runtimeDependencies.values()) {
 			calledBeansSet.addAll(values.keySet());
 		}
-		final List<String> result = new ArrayList<String>(calledBeansSet);
-		Collections.sort(result);
+		final List<String> result = new ArrayList<>(calledBeansSet);
+		result.sort(Comparator.naturalOrder());
 		return result;
 	}
 
@@ -216,8 +213,8 @@ class PdfRuntimeDependenciesReport extends PdfAbstractReport {
 
 		writeHeader();
 
-		final List<String> callerBeans = new ArrayList<String>(runtimeDependencies.keySet());
-		Collections.sort(callerBeans);
+		final List<String> callerBeans = new ArrayList<>(runtimeDependencies.keySet());
+		callerBeans.sort(Comparator.naturalOrder());
 		final PdfPCell defaultCell = getDefaultCell();
 		boolean odd = false;
 		for (final String callerBean : callerBeans) {
@@ -255,7 +252,7 @@ class PdfRuntimeDependenciesReport extends PdfAbstractReport {
 	}
 
 	private void writeHeader() throws DocumentException {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add("Beans");
 		headers.addAll(calledBeans);
 		final int[] relativeWidths = new int[headers.size()];

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -129,7 +129,7 @@ public final class ProcessInformations implements Serializable {
 			sc.nextLine();
 		}
 
-		final List<ProcessInformations> processInfos = new ArrayList<ProcessInformations>();
+		final List<ProcessInformations> processInfos = new ArrayList<>();
 		while (sc.hasNext()) {
 			final ProcessInformations processInfo = new ProcessInformations(sc, windows, macOrAix);
 			processInfos.add(processInfo);

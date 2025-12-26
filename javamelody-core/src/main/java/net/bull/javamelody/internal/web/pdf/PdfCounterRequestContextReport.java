@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -70,13 +70,11 @@ class PdfCounterRequestContextReport extends PdfAbstractTableReport {
 		assert pdfDocumentFactory != null;
 
 		this.rootCurrentContexts = rootCurrentContexts;
-		this.counterReportsByCounterName = new HashMap<String, PdfCounterReport>(
-				pdfCounterReports.size());
+		this.counterReportsByCounterName = new HashMap<>(pdfCounterReports.size());
 		for (final PdfCounterReport counterReport : pdfCounterReports) {
 			counterReportsByCounterName.put(counterReport.getCounterName(), counterReport);
 		}
-		this.threadInformationsByThreadId = new HashMap<Long, ThreadInformations>(
-				threadInformationsList.size());
+		this.threadInformationsByThreadId = new HashMap<>(threadInformationsList.size());
 		for (final ThreadInformations threadInformations : threadInformationsList) {
 			this.threadInformationsByThreadId.put(threadInformations.getId(), threadInformations);
 		}
@@ -155,7 +153,7 @@ class PdfCounterRequestContextReport extends PdfAbstractTableReport {
 
 	private List<String> createHeaders(List<CounterRequestContext> contexts,
 			boolean displayRemoteUser) {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getString("Thread"));
 		if (displayRemoteUser) {
 			headers.add(getString("Utilisateur"));
@@ -190,15 +188,7 @@ class PdfCounterRequestContextReport extends PdfAbstractTableReport {
 	private void writeContext(CounterRequestContext rootContext, boolean displayRemoteUser)
 			throws DocumentException, IOException {
 		getDefaultCell().setHorizontalAlignment(Element.ALIGN_LEFT);
-		// attention, cela ne marcherait pas sur le serveur de collecte, à partir du seul threadId
-		// s'il y a plusieurs instances en cluster
-		final ThreadInformations threadInformations = threadInformationsByThreadId
-				.get(rootContext.getThreadId());
-		if (threadInformations == null) {
-			addCell(""); // un décalage n'a pas permis de récupérer le thread de ce context
-		} else {
-			addCell(threadInformations.getName());
-		}
+		addCell(rootContext.getThreadName());
 		if (displayRemoteUser) {
 			if (rootContext.getRemoteUser() == null) {
 				addCell("");
@@ -207,7 +197,7 @@ class PdfCounterRequestContextReport extends PdfAbstractTableReport {
 			}
 		}
 
-		final List<CounterRequestContext> contexts = new ArrayList<CounterRequestContext>();
+		final List<CounterRequestContext> contexts = new ArrayList<>();
 		contexts.add(rootContext);
 		contexts.addAll(rootContext.getChildContexts());
 		writeRequests(contexts);
@@ -221,8 +211,19 @@ class PdfCounterRequestContextReport extends PdfAbstractTableReport {
 
 		if (stackTraceEnabled) {
 			getDefaultCell().setHorizontalAlignment(Element.ALIGN_LEFT);
+			// attention, cela ne marcherait pas sur le serveur de collecte, à partir du seul threadId
+			// s'il y a plusieurs instances en cluster
+			final ThreadInformations threadInformations = threadInformationsByThreadId
+					.get(rootContext.getThreadId());
 			if (threadInformations == null) {
-				addCell(""); // un décalage n'a pas permis de récupérer le thread de ce context
+				// soit un décalage n'a pas permis de récupérer le thread de ce context,
+				// soit ce thread est un thread virtuel (java 21)
+				final List<StackTraceElement> stackTrace = rootContext.getThreadStackTrace();
+				if (stackTrace != null && !stackTrace.isEmpty()) {
+					addCell(stackTrace.get(0).toString());
+				} else {
+					addCell("");
+				}
 			} else {
 				addCell(threadInformations.getExecutedMethod());
 			}

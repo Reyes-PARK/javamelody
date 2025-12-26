@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -27,7 +27,7 @@ import java.util.Map;
 /**
  * Données statistiques d'une requête identifiée, hors paramètres dynamiques comme un identifiant,
  * et sur la période considérée selon le pilotage du {@link Collector} par l'intermédiaire d'un {@link Counter}.
- *
+ * <p>
  * Les méthodes d'une instance de cette classe ne sont pas thread-safe.
  * L'état d'une instance doit être accédé ou modifié par l'intermédiaire d'une instance de {@link Counter},
  * qui gérera les accès concurrents sur les instances de cette classe.
@@ -62,7 +62,7 @@ public class CounterRequest implements Cloneable, Serializable {
 	/**
 	 * Interface du contexte d'une requête en cours.
 	 */
-	interface ICounterRequestContext {
+	public interface ICounterRequestContext {
 		/**
 		 * @return Nombre de hits du compteur fils pour ce contexte.
 		 */
@@ -72,11 +72,6 @@ public class CounterRequest implements Cloneable, Serializable {
 		 * @return Temps total du compteur fils pour ce contexte.
 		 */
 		int getChildDurationsSum();
-
-		/**
-		 * @return Nombres d'exécutions par requêtes filles
-		 */
-		Map<String, Long> getChildRequestsExecutionsByRequestId();
 	}
 
 	/**
@@ -229,11 +224,11 @@ public class CounterRequest implements Cloneable, Serializable {
 	/**
 	 * @return Moyenne des tailles des réponses (http en particulier)
 	 */
-	public int getResponseSizeMean() {
+	public long getResponseSizeMean() {
 		if (hits > 0) {
-			return (int) (responseSizesSum / hits);
+			return responseSizesSum / hits;
 		}
-		return -1;
+		return -1L;
 	}
 
 	/**
@@ -271,7 +266,7 @@ public class CounterRequest implements Cloneable, Serializable {
 			return Collections.emptyMap();
 		}
 		synchronized (this) {
-			return new LinkedHashMap<String, Long>(childRequestsExecutionsByRequestId);
+			return new LinkedHashMap<>(childRequestsExecutionsByRequestId);
 		}
 	}
 
@@ -296,7 +291,7 @@ public class CounterRequest implements Cloneable, Serializable {
 	}
 
 	void addHit(long duration, int cpuTime, int allocatedKBytes, boolean systemError,
-			String systemErrorStackTrace, int responseSize) {
+			String systemErrorStackTrace, long responseSize) {
 		hits++;
 		durationsSum += duration;
 		durationsSquareSum += duration * duration;
@@ -322,7 +317,7 @@ public class CounterRequest implements Cloneable, Serializable {
 	void addChildRequests(Map<String, Long> childRequests) {
 		if (childRequests != null && !childRequests.isEmpty()) {
 			if (childRequestsExecutionsByRequestId == null) {
-				childRequestsExecutionsByRequestId = new LinkedHashMap<String, Long>(childRequests);
+				childRequestsExecutionsByRequestId = new LinkedHashMap<>(childRequests);
 			} else {
 				for (final Map.Entry<String, Long> entry : childRequests.entrySet()) {
 					final String requestId = entry.getKey();

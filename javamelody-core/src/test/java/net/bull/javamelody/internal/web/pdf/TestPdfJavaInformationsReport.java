@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -21,7 +21,6 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import javax.management.MBeanServer;
@@ -60,7 +59,7 @@ public class TestPdfJavaInformationsReport {
 		final PdfDocumentFactory pdfDocumentFactory = new PdfDocumentFactory(TEST_APP, null,
 				output);
 		final MBeanServer mBeanServer = MBeans.getPlatformMBeanServer();
-		final List<ObjectName> mBeans = new ArrayList<ObjectName>();
+		final List<ObjectName> mBeans = new ArrayList<>();
 		try {
 			mBeans.add(mBeanServer
 					.registerMBean(new ThreadPool(),
@@ -73,8 +72,8 @@ public class TestPdfJavaInformationsReport {
 											"Catalina:type=GlobalRequestProcessor,name=jk-8009"))
 							.getObjectName());
 			TomcatInformations.initMBeans();
-			final List<JavaInformations> myJavaInformationsList = Arrays
-					.asList(new JavaInformations(null, true));
+			final List<JavaInformations> myJavaInformationsList = List
+					.of(new JavaInformations(null, true));
 			final Document document = pdfDocumentFactory.createDocument();
 			document.open();
 			final PdfJavaInformationsReport pdfReport = new PdfJavaInformationsReport(
@@ -96,8 +95,8 @@ public class TestPdfJavaInformationsReport {
 											"Catalina:type=GlobalRequestProcessor,name=jk-8010"))
 							.getObjectName());
 			TomcatInformations.initMBeans();
-			final List<JavaInformations> myJavaInformationsList2 = Arrays
-					.asList(new JavaInformations(null, true));
+			final List<JavaInformations> myJavaInformationsList2 = List
+					.of(new JavaInformations(null, true));
 			final Document document2 = pdfDocumentFactory.createDocument();
 			document2.open();
 			final PdfJavaInformationsReport pdfReport2 = new PdfJavaInformationsReport(
@@ -107,8 +106,8 @@ public class TestPdfJavaInformationsReport {
 			assertNotEmptyAndClear(output);
 
 			jk8010.setrequestCount(1000);
-			final List<JavaInformations> myJavaInformationsList3 = Arrays
-					.asList(new JavaInformations(null, true));
+			final List<JavaInformations> myJavaInformationsList3 = List
+					.of(new JavaInformations(null, true));
 			final Document document3 = pdfDocumentFactory.createDocument();
 			document3.open();
 			final PdfJavaInformationsReport pdfReport3 = new PdfJavaInformationsReport(

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -60,14 +60,14 @@ class HtmlMBeansReport extends HtmlAbstractReport {
 
 		// MBeans pour la plateforme
 		final MBeanNode platformNode = mbeans.get(0);
-		writeln("<div style='margin-left: 20px'>");
+		writeln("<div class='mbeanNode'>");
 		writeTree(platformNode.getChildren());
 		writeln(endDiv);
 
 		for (final MBeanNode node : mbeans) {
 			if (node != platformNode) {
 				writeDirectly("<br/><b>" + htmlEncodeButNotSpace(node.getName()) + "</b>");
-				writeln("<div style='margin-left: 20px'><br/>");
+				writeln("<div class='mbeanNode'><br/>");
 				writeTree(node.getChildren());
 				writeln(endDiv);
 			}
@@ -87,7 +87,7 @@ class HtmlMBeansReport extends HtmlAbstractReport {
 			if (children != null) {
 				final String id = getNextId();
 				writePrintedShowHideLink(id, htmlEncodeButNotSpace(name));
-				writeln("<div id='" + id + "' style='display: none; margin-left: 20px;'><div>");
+				writeln("<div id='" + id + "' class='displayNone mbeanNode'><div>");
 				writeTree(children);
 				writeln("</div></div>");
 			} else {
@@ -103,7 +103,7 @@ class HtmlMBeansReport extends HtmlAbstractReport {
 		if (indexOfComma != -1) {
 			mbeanName = mbeanName.substring(indexOfComma + 1);
 			writePrintedShowHideLink(mbeanId, htmlEncodeButNotSpace(mbeanName));
-			writeln("<div id='" + mbeanId + "' style='display: none; margin-left: 20px;'>");
+			writeln("<div id='" + mbeanId + "' class='displayNone mbeanNode'>");
 			// pas besoin d'ajouter un div pour le scroll-down, car les attributs sont
 			// dans une table
 			writeAttributes(mbean);
@@ -117,12 +117,9 @@ class HtmlMBeansReport extends HtmlAbstractReport {
 		final String description = mbean.getDescription();
 		final List<MBeanAttribute> attributes = mbean.getAttributes();
 		if (description != null || !attributes.isEmpty()) {
-			writeln("<style type='text/css'>");
-			writeln("    td { padding:3px; }");
-			writeln("</style>");
 			writeln("<table border='0' summary=''>");
 			if (description != null) {
-				write("<tr><td colspan='3'>(");
+				write("<tr><td colspan='3' class='mbeanAttributes'>(");
 				writeDirectly(htmlEncodeButNotSpace(description));
 				write(")</td></tr>");
 			}
@@ -171,7 +168,7 @@ class HtmlMBeansReport extends HtmlAbstractReport {
 
 	void writeLinks() throws IOException {
 		writeln("<div class='noPrint'>");
-		writeln("<a href='javascript:history.back()'><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
+		writeln("<a class='back' href=''><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
 		writeln("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 		writeln("<a href='?part=mbeans'><img src='?resource=action_refresh.png' alt='#Actualiser#'/> #Actualiser#</a>");
 		if (isPdfEnabled()) {
@@ -183,7 +180,8 @@ class HtmlMBeansReport extends HtmlAbstractReport {
 	}
 
 	private void writePrintedShowHideLink(String idToShow, String label) throws IOException {
-		writeDirectly("<a href=\"javascript:showHide('" + idToShow + "');\"><img id='" + idToShow
+		writeDirectly("<a class='showHide' href='' id='" + idToShow + "A' data-show-hide-id='"
+				+ idToShow + "'><img id='" + idToShow
 				+ "Img' src='?resource=bullets/plus.png' alt=''/> " + label + "</a>");
 	}
 }

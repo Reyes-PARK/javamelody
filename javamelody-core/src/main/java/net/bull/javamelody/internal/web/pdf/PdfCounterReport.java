@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -84,7 +84,7 @@ class PdfCounterReport extends PdfAbstractTableReport {
 		} else {
 			// 1. synthèse
 			final CounterRequest globalRequest = counterRequestAggregation.getGlobalRequest();
-			final List<CounterRequest> summaryRequests = Arrays.asList(globalRequest,
+			final List<CounterRequest> summaryRequests = List.of(globalRequest,
 					counterRequestAggregation.getWarningRequest(),
 					counterRequestAggregation.getSevereRequest());
 			writeRequests(counter.getChildCounterName(), summaryRequests);
@@ -169,7 +169,7 @@ class PdfCounterReport extends PdfAbstractTableReport {
 	}
 
 	private List<String> createHeaders(String childCounterName) {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getRequestHeader());
 		if (includeGraph) {
 			headers.add(getString("Evolution"));
@@ -266,7 +266,7 @@ class PdfCounterReport extends PdfAbstractTableReport {
 			addCell(systemErrorFormat.format(request.getSystemErrorPercentage()));
 		}
 		if (counterRequestAggregation.isResponseSizeDisplayed()) {
-			addCell(integerFormat.format(request.getResponseSizeMean() / 1024));
+			addCell(integerFormat.format(request.getResponseSizeMean() / 1024L));
 		}
 		if (counterRequestAggregation.isChildHitsDisplayed()) {
 			addCell(integerFormat.format(request.getChildHitsMean()));

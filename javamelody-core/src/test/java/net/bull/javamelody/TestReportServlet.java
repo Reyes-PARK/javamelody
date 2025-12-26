@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -28,19 +28,18 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
-
-import javax.servlet.ServletConfig;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletConfig;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.internal.common.HttpParameter;
 import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.web.FilterServletOutputStream;
@@ -62,9 +61,7 @@ public class TestReportServlet {
 			final Field field = MonitoringFilter.class.getDeclaredField("instanceCreated");
 			field.setAccessible(true);
 			field.set(null, false);
-		} catch (final IllegalAccessException e) {
-			throw new IllegalStateException(e);
-		} catch (final NoSuchFieldException e) {
+		} catch (final IllegalAccessException | NoSuchFieldException e) {
 			throw new IllegalStateException(e);
 		}
 	}
@@ -80,13 +77,13 @@ public class TestReportServlet {
 	 * @throws IOException e */
 	@Test
 	public void testDoGet() throws ServletException, IOException {
-		doGet(Collections.<HttpParameter, String> emptyMap(), true);
+		doGet(Collections.emptyMap(), true);
 
 		setProperty(Parameter.ALLOWED_ADDR_PATTERN, "256.*");
 		try {
-			doGet(Collections.<HttpParameter, String> emptyMap(), false);
+			doGet(Collections.emptyMap(), false);
 			setProperty(Parameter.ALLOWED_ADDR_PATTERN, ".*");
-			doGet(Collections.<HttpParameter, String> emptyMap(), false);
+			doGet(Collections.emptyMap(), false);
 		} finally {
 			setProperty(Parameter.ALLOWED_ADDR_PATTERN, null);
 		}
@@ -95,8 +92,8 @@ public class TestReportServlet {
 	private void doGet(Map<HttpParameter, String> parameters, boolean checkResultContent)
 			throws IOException, ServletException {
 		final ServletContext parametersContext = createNiceMock(ServletContext.class);
-		expect(parametersContext.getMajorVersion()).andReturn(2).anyTimes();
-		expect(parametersContext.getMinorVersion()).andReturn(5).anyTimes();
+		expect(parametersContext.getMajorVersion()).andReturn(5).anyTimes();
+		expect(parametersContext.getMinorVersion()).andReturn(0).anyTimes();
 		expect(parametersContext.getContextPath()).andReturn(CONTEXT_PATH).anyTimes();
 		expect(parametersContext.getServletContextName()).andReturn("test webapp").anyTimes();
 		expect(parametersContext.getServerInfo()).andReturn("mock").anyTimes();
@@ -112,11 +109,12 @@ public class TestReportServlet {
 				Parameters.PARAMETER_SYSTEM_PREFIX + Parameter.DISABLED.getCode())).andReturn(null)
 						.anyTimes();
 		expect(config.getInitParameter(Parameter.DISABLED.getCode())).andReturn(null).anyTimes();
-		expect(context.getMajorVersion()).andReturn(2).anyTimes();
-		expect(context.getMinorVersion()).andReturn(5).anyTimes();
+		expect(context.getMajorVersion()).andReturn(5).anyTimes();
+		expect(context.getMinorVersion()).andReturn(0).anyTimes();
 		expect(context.getContextPath()).andReturn(CONTEXT_PATH).anyTimes();
-		expect(context.getAttribute(ReportServlet.FILTER_CONTEXT_KEY))
-				.andReturn(new FilterContext("Classic")).anyTimes();
+		final FilterContext filterContext = new FilterContext("Classic");
+		expect(context.getAttribute(ReportServlet.FILTER_CONTEXT_KEY)).andReturn(filterContext)
+				.anyTimes();
 		final ReportServlet reportServlet = new ReportServlet();
 		replay(config);
 		replay(context);
@@ -139,7 +137,7 @@ public class TestReportServlet {
 			}
 		}
 		expect(request.getHeaders("Accept-Encoding"))
-				.andReturn(Collections.enumeration(Arrays.asList("application/gzip"))).anyTimes();
+				.andReturn(Collections.enumeration(List.of("application/gzip"))).anyTimes();
 		final HttpServletResponse response = createNiceMock(HttpServletResponse.class);
 		final ByteArrayOutputStream output = new ByteArrayOutputStream();
 		expect(response.getOutputStream()).andReturn(new FilterServletOutputStream(output))
@@ -156,6 +154,7 @@ public class TestReportServlet {
 		if (checkResultContent) {
 			assertTrue("result", output.size() != 0 || stringWriter.getBuffer().length() != 0);
 		}
+		filterContext.destroy();
 	}
 
 	private static void setProperty(Parameter parameter, String value) {

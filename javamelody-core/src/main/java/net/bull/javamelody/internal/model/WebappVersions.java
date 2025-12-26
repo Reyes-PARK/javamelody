@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -45,8 +45,8 @@ import net.bull.javamelody.internal.common.Parameters;
  * @author Emeric Vernat
  */
 class WebappVersions {
-	private static final Comparator<Map.Entry<String, Date>> WEBAPP_VERSIONS_VALUE_COMPARATOR = Collections
-			.reverseOrder(new MapValueComparator<String, Date>());
+	private static final Comparator<Map.Entry<String, Date>> WEBAPP_VERSIONS_VALUE_COMPARATOR = new MapValueComparator<String, Date>()
+			.reversed();
 	private static final String VERSIONS_FILENAME = "versions.properties";
 	private static final String VERSIONS_DATE_PATTERN = "yyyy/MM/dd";
 
@@ -80,15 +80,12 @@ class WebappVersions {
 
 	@SuppressWarnings("unchecked")
 	private Map<String, Date> readDatesByVersions() {
-		final Map<String, Date> result = new HashMap<String, Date>();
+		final Map<String, Date> result = new HashMap<>();
 		if (versionsFile.exists()) {
 			final Properties versionsProperties = new Properties();
 			try {
-				final InputStream input = new FileInputStream(versionsFile);
-				try {
+				try (InputStream input = new FileInputStream(versionsFile)) {
 					versionsProperties.load(input);
-				} finally {
-					input.close();
 				}
 				final List<String> propertyNames = (List<String>) Collections
 						.list(versionsProperties.propertyNames());
@@ -111,10 +108,9 @@ class WebappVersions {
 	}
 
 	Map<String, Date> getDatesByVersions() {
-		final List<Map.Entry<String, Date>> entries = new ArrayList<Map.Entry<String, Date>>(
-				datesByVersions.entrySet());
-		Collections.sort(entries, WEBAPP_VERSIONS_VALUE_COMPARATOR);
-		final Map<String, Date> map = new LinkedHashMap<String, Date>();
+		final List<Map.Entry<String, Date>> entries = new ArrayList<>(datesByVersions.entrySet());
+		entries.sort(WEBAPP_VERSIONS_VALUE_COMPARATOR);
+		final Map<String, Date> map = new LinkedHashMap<>();
 		for (final Map.Entry<String, Date> entry : entries) {
 			map.put(entry.getKey(), entry.getValue());
 		}
@@ -128,11 +124,8 @@ class WebappVersions {
 
 		final Properties versionsProperties = new Properties();
 		if (versionsFile.exists()) {
-			final InputStream input = new FileInputStream(versionsFile);
-			try {
+			try (InputStream input = new FileInputStream(versionsFile)) {
 				versionsProperties.load(input);
-			} finally {
-				input.close();
 			}
 		}
 		assert versionsProperties.getProperty(webappVersion) == null;
@@ -140,11 +133,12 @@ class WebappVersions {
 		final SimpleDateFormat dateFormat = new SimpleDateFormat(VERSIONS_DATE_PATTERN, Locale.US);
 		versionsProperties.setProperty(webappVersion, dateFormat.format(new Date()));
 
-		final OutputStream output = new FileOutputStream(versionsFile);
-		try {
+		final File directory = versionsFile.getParentFile();
+		if (!directory.mkdirs() && !directory.exists()) {
+			throw new IOException("JavaMelody directory can't be created: " + directory.getPath());
+		}
+		try (OutputStream output = new FileOutputStream(versionsFile)) {
 			versionsProperties.store(output, "Application deployments with versions and dates");
-		} finally {
-			output.close();
 		}
 		datesByVersions.put(webappVersion, new Date());
 		LOG.debug("New application version added: " + webappVersion);

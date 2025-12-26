@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -38,9 +38,9 @@ class CloudWatch extends MetricsPublisher {
 	private final String cloudWatchNamespace;
 	private final AmazonCloudWatch awsCloudWatch;
 	private final String prefix;
-	private final List<Dimension> dimensions = new ArrayList<Dimension>();
+	private final List<Dimension> dimensions = new ArrayList<>();
 
-	private final List<MetricDatum> buffer = new ArrayList<MetricDatum>();
+	private final List<MetricDatum> buffer = new ArrayList<>();
 	private long lastTime;
 	private Date lastTimestamp;
 
@@ -49,10 +49,10 @@ class CloudWatch extends MetricsPublisher {
 		super();
 		assert cloudWatch != null;
 		assert cloudWatchNamespace != null && !cloudWatchNamespace.startsWith("AWS/")
-				&& cloudWatchNamespace.length() > 0 && cloudWatchNamespace.length() <= 255;
+				&& !cloudWatchNamespace.isEmpty() && cloudWatchNamespace.length() <= 255;
 		assert prefix != null;
-		assert application.length() >= 1 && application.length() <= 255;
-		assert hostName.length() >= 1 && hostName.length() <= 255;
+		assert !application.isEmpty() && application.length() <= 255;
+		assert !hostName.isEmpty() && hostName.length() <= 255;
 
 		this.awsCloudWatch = cloudWatch;
 		this.cloudWatchNamespace = cloudWatchNamespace;
@@ -144,7 +144,7 @@ class CloudWatch extends MetricsPublisher {
 	public void send() throws IOException {
 		final List<MetricDatum> datumList;
 		synchronized (buffer) {
-			datumList = new ArrayList<MetricDatum>(buffer);
+			datumList = new ArrayList<>(buffer);
 			buffer.clear();
 		}
 		// note: Each PutMetricData request is limited to 40 KB in size for HTTP POST requests.
@@ -163,7 +163,7 @@ class CloudWatch extends MetricsPublisher {
 	}
 
 	private static <T> List<List<T>> partition(List<T> list, int partitionSize) {
-		final List<List<T>> partitions = new ArrayList<List<T>>();
+		final List<List<T>> partitions = new ArrayList<>();
 		for (int i = 0; i < list.size(); i += partitionSize) {
 			partitions.add(list.subList(i, Math.min(i + partitionSize, list.size())));
 		}

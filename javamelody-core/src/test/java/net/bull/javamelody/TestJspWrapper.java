@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -27,15 +27,14 @@ import static org.junit.Assert.assertNull;
 
 import java.io.IOException;
 
-import javax.servlet.RequestDispatcher;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.RequestDispatcher;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.internal.common.Parameters;
 
 /**
@@ -72,6 +71,7 @@ public class TestJspWrapper {
 		final String url2 = "test.jsp?param=test2";
 		final String url3 = "test.jsp?param=test3";
 		final String url4 = null;
+		expect(servletContext.getMajorVersion()).andReturn(5).anyTimes();
 		expect(request.getRequestDispatcher(url1)).andReturn(requestDispatcher);
 		expect(request.getRequestDispatcher(url2)).andReturn(requestDispatcherWithError);
 		requestDispatcherWithError.forward(request, response);

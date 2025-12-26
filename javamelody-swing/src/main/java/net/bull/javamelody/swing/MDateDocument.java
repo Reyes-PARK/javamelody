@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -68,8 +68,8 @@ public class MDateDocument extends PlainDocument {
 
 			final Locale locale = Locale.getDefault();
 			final String pattern = patternSb.toString();
-			final String pattern2 = pattern.replaceAll("y", "");
-			final String pattern3 = pattern2.replaceAll("M", "");
+			final String pattern2 = pattern.replace("y", "");
+			final String pattern3 = pattern2.replace("M", "");
 			final SimpleDateFormat myAlternateDateFormat2 = new SimpleDateFormat(pattern2, locale);
 			final SimpleDateFormat myAlternateDateFormat3 = new SimpleDateFormat(pattern3, locale);
 

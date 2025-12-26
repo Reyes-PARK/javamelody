@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,44 +17,50 @@
  */
 package net.bull.javamelody.internal.web.html; // NOPMD
 
+import static org.easymock.EasyMock.createNiceMock;
+import static org.easymock.EasyMock.replay;
+import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.sql.Connection;
-import java.text.ParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import javax.cache.Caching;
+import javax.cache.configuration.MutableConfiguration;
+
 import org.junit.Before;
 import org.junit.Test;
-import org.quartz.CronTrigger;
+import org.quartz.CronScheduleBuilder;
+import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
-import org.quartz.NthIncludedDayTrigger;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
-import org.quartz.SimpleTrigger;
+import org.quartz.SimpleScheduleBuilder;
 import org.quartz.Trigger;
+import org.quartz.TriggerBuilder;
 import org.quartz.impl.StdSchedulerFactory;
 
+import jakarta.servlet.http.HttpSession;
 import net.bull.javamelody.JdbcWrapper;
 import net.bull.javamelody.JobTestImpl;
 import net.bull.javamelody.Parameter;
+import net.bull.javamelody.SessionListener;
 import net.bull.javamelody.Utils;
 import net.bull.javamelody.internal.common.HttpPart;
 import net.bull.javamelody.internal.common.I18N;
@@ -70,10 +76,8 @@ import net.bull.javamelody.internal.model.MBeans;
 import net.bull.javamelody.internal.model.Period;
 import net.bull.javamelody.internal.model.ProcessInformations;
 import net.bull.javamelody.internal.model.Range;
-import net.bull.javamelody.internal.model.SessionInformations;
 import net.bull.javamelody.internal.model.TestCounter;
 import net.bull.javamelody.internal.model.TestDatabaseInformations;
-import net.bull.javamelody.internal.model.ThreadInformations;
 import net.sf.ehcache.Cache;
 import net.sf.ehcache.CacheManager;
 import net.sf.ehcache.Element;
@@ -107,8 +111,8 @@ public class TestHtmlReport {
 		counter = new Counter("http", "dbweb.png", sqlCounter);
 		errorCounter = new Counter(Counter.ERROR_COUNTER_NAME, null);
 		final Counter jobCounter = getJobCounter();
-		collector = new Collector("test", Arrays.asList(counter, sqlCounter, servicesCounter,
-				jspCounter, errorCounter, jobCounter));
+		collector = new Collector("test", List.of(counter, sqlCounter, servicesCounter, jspCounter,
+				errorCounter, jobCounter));
 		writer = new StringWriter();
 	}
 
@@ -120,6 +124,39 @@ public class TestHtmlReport {
 				Period.TOUT, writer);
 		htmlReport.toHtml();
 		assertNotEmptyAndClear(writer);
+	}
+
+	/** Test.
+	 * @throws IOException e */
+	@Test
+	public void testToHtmlWithSession() throws IOException {
+		final HttpSession session = createNiceMock(HttpSession.class);
+		replay(session);
+		try {
+			SessionListener.bindSession(session);
+			final HtmlReport htmlReport = new HtmlReport(collector, null, javaInformationsList,
+					Period.TOUT, writer);
+			htmlReport.toHtml();
+			assertNotEmptyAndClear(writer);
+		} finally {
+			SessionListener.unbindSession();
+		}
+		verify(session);
+	}
+
+	@Test
+	public void testToHtmlWithHsErrPid() throws IOException {
+		final File hsErrPidFile = new File("./hs_err_pid12345.log");
+		try {
+			hsErrPidFile.createNewFile();
+			setUp();
+			final HtmlReport htmlReport = new HtmlReport(collector, null, javaInformationsList,
+					Period.TOUT, writer);
+			htmlReport.toHtml();
+			assertNotEmptyAndClear(writer);
+		} finally {
+			hsErrPidFile.delete();
+		}
 	}
 
 	/** Test.
@@ -139,8 +176,8 @@ public class TestHtmlReport {
 	 * @throws IOException e */
 	@Test
 	public void testDoubleJavaInformations() throws IOException {
-		final List<JavaInformations> myJavaInformationsList = Arrays
-				.asList(new JavaInformations(null, true), new JavaInformations(null, true));
+		final List<JavaInformations> myJavaInformationsList = List
+				.of(new JavaInformations(null, true), new JavaInformations(null, true));
 		final HtmlReport htmlReport = new HtmlReport(collector, null, myJavaInformationsList,
 				Period.TOUT, writer);
 		htmlReport.toHtml(null, null);
@@ -189,7 +226,7 @@ public class TestHtmlReport {
 		setProperty(Parameter.WARNING_THRESHOLD_MILLIS, null);
 
 		// cas counterReportsByCounterName.size() == 1
-		collector = new Collector("test", Arrays.asList(counter));
+		collector = new Collector("test", List.of(counter));
 		final HtmlReport htmlReport2 = new HtmlReport(collector, null, javaInformationsList,
 				Period.TOUT, writer);
 		htmlReport2.toHtml(null, null);
@@ -221,7 +258,7 @@ public class TestHtmlReport {
 		// counter avec période non TOUT et des requêtes
 		collector.collectWithoutErrors(javaInformationsList);
 		final String requestName = "test 1";
-		counter.bindContext(requestName, "complete test 1", null, null, -1, -1);
+		counter.bindContext(requestName, "complete test 1", null, -1, -1);
 		sqlCounter.addRequest("sql1", 10, 10, 10, false, -1);
 		counter.addRequest(requestName, 0, 0, 0, false, 1000);
 		counter.addRequest("test2", 1000, 500, 500, false, 1000);
@@ -254,13 +291,13 @@ public class TestHtmlReport {
 		// il ne sera pas utilisé dans writeRequestAndGraphDetail
 		sqlCounter.setDisplayed(true);
 		final String requestName = "test 1";
-		counter.bindContext(requestName, "complete test 1", null, null, -1, -1);
+		counter.bindContext(requestName, "complete test 1", null, -1, -1);
 		servicesCounter.clear();
-		servicesCounter.bindContext("myservices.service1", "service1", null, null, -1, -1);
-		sqlCounter.bindContext("sql1", "complete sql1", null, null, -1, -1);
+		servicesCounter.bindContext("myservices.service1", "service1", null, -1, -1);
+		sqlCounter.bindContext("sql1", "complete sql1", null, -1, -1);
 		sqlCounter.addRequest("sql1", 5, -1, -1, false, -1);
 		servicesCounter.addRequest("myservices.service1", 10, 10, 10, false, -1);
-		servicesCounter.bindContext("myservices.service2", "service2", null, null, -1, -1);
+		servicesCounter.bindContext("myservices.service2", "service2", null, -1, -1);
 		servicesCounter.addRequest("myservices.service2", 10, 10, 10, false, -1);
 		servicesCounter.addRequest("otherservices.service3", 10, 10, 10, false, -1);
 		servicesCounter.addRequest("otherservices", 10, 10, 10, false, -1);
@@ -302,11 +339,9 @@ public class TestHtmlReport {
 
 		htmlReport.writeSessionDetail("", null);
 		assertNotEmptyAndClear(writer);
-		htmlReport.writeSessions(Collections.<SessionInformations> emptyList(), "message",
-				HttpPart.SESSIONS.getName());
+		htmlReport.writeSessions(Collections.emptyList(), "message", HttpPart.SESSIONS.getName());
 		assertNotEmptyAndClear(writer);
-		htmlReport.writeSessions(Collections.<SessionInformations> emptyList(), null,
-				HttpPart.SESSIONS.getName());
+		htmlReport.writeSessions(Collections.emptyList(), null, HttpPart.SESSIONS.getName());
 		assertNotEmptyAndClear(writer);
 		htmlReport.writeMBeans(MBeans.getAllMBeanNodes());
 		assertNotEmptyAndClear(writer);
@@ -316,12 +351,11 @@ public class TestHtmlReport {
 		htmlReport.writeProcesses(ProcessInformations
 				.buildProcessInformations(getClass().getResourceAsStream("/ps.txt"), false, false));
 		assertNotEmptyAndClear(writer);
-		HtmlReport.writeAddAndRemoveApplicationLinks(null, writer);
+		HtmlReport.writeAddAndRemoveApplicationLinks(null, new ArrayList<>(), writer);
 		assertNotEmptyAndClear(writer);
-		HtmlReport.writeAddAndRemoveApplicationLinks("test", writer);
+		HtmlReport.writeAddAndRemoveApplicationLinks("test", new ArrayList<>(), writer);
 		assertNotEmptyAndClear(writer);
-		final Connection connection = TestDatabaseInformations.initH2();
-		try {
+		try (Connection connection = TestDatabaseInformations.initH2()) {
 			htmlReport.writeDatabase(new DatabaseInformations(0)); // h2.memory
 			assertNotEmptyAndClear(writer);
 			htmlReport.writeDatabase(new DatabaseInformations(3)); // h2.settings avec nbColumns==2
@@ -339,8 +373,6 @@ public class TestHtmlReport {
 			System.setProperty(Parameters.PARAMETER_SYSTEM_PREFIX + "custom", "custom.jsp");
 			htmlReport.toHtml(null, null); // writeMenu
 			assertNotEmptyAndClear(writer);
-		} finally {
-			connection.close();
 		}
 	}
 
@@ -358,12 +390,7 @@ public class TestHtmlReport {
 		final Connection connection = TestDatabaseInformations.initH2();
 		// une deuxième connexion créée sur un thread qui n'existera plus quand le rapport sera généré
 		final ExecutorService executorService = Executors.newFixedThreadPool(1);
-		final Callable<Connection> task = new Callable<Connection>() {
-			@Override
-			public Connection call() {
-				return TestDatabaseInformations.initH2();
-			}
-		};
+		final Callable<Connection> task = TestDatabaseInformations::initH2;
 		final Future<Connection> future = executorService.submit(task);
 		final Connection connection2 = future.get();
 		executorService.shutdown();
@@ -386,27 +413,28 @@ public class TestHtmlReport {
 		// addRequest pour que CounterRequestContext.getCpuTime() soit appelée
 		counter.addRequest("first request", 100, 100, 100, false, 1000);
 		TestCounter.bindRootContexts("first request", counter, 3);
-		sqlCounter.bindContext("sql", "sql", null, null, -1, -1);
+		sqlCounter.bindContext("sql", "sql", null, -1, -1);
 		htmlReport = new HtmlReport(collector, null, javaInformationsList, Period.TOUT, writer);
 		htmlReport.toHtml("message a", null);
 		assertNotEmptyAndClear(writer);
 
 		final Counter myCounter = new Counter("http", null);
-		final Collector collector2 = new Collector("test 2", Arrays.asList(myCounter));
-		myCounter.bindContext("my context", "my context", null, null, -1, -1);
+		final Collector collector2 = new Collector("test 2", List.of(myCounter));
+		myCounter.bindContext("my context", "my context", null, -1, -1);
 		htmlReport = new HtmlReport(collector2, null, javaInformationsList, Period.SEMAINE, writer);
 		htmlReport.toHtml("message b", null);
 		assertNotEmptyAndClear(writer);
 
 		final HtmlCounterRequestContextReport htmlCounterRequestContextReport = new HtmlCounterRequestContextReport(
 				collector2.getRootCurrentContexts(collector2.getCounters()), null,
-				new ArrayList<ThreadInformations>(), false, 500, writer);
+				new ArrayList<>(), false, 500, writer);
 		htmlCounterRequestContextReport.toHtml();
 		assertNotEmptyAndClear(writer);
 	}
 
 	/** Test.
 	 * @throws IOException e */
+	@SuppressWarnings("deprecation")
 	@Test
 	public void testCache() throws IOException {
 		final String cacheName = "test 1";
@@ -445,6 +473,47 @@ public class TestHtmlReport {
 	}
 
 	/** Test.
+	 * @throws IOException e */
+	@Test
+	public void testJCache() throws IOException {
+		final String cacheName = "test 1";
+		final javax.cache.CacheManager jcacheManager = Caching.getCachingProvider()
+				.getCacheManager();
+		final MutableConfiguration<Object, Object> conf = new MutableConfiguration<>();
+		conf.setManagementEnabled(true);
+		conf.setStatisticsEnabled(true);
+		jcacheManager.createCache(cacheName, conf);
+		// test empty cache name in the cache keys link:
+		jcacheManager.createCache("", conf);
+		final String cacheName2 = "test 2";
+		try {
+			final javax.cache.Cache<Object, Object> cache = jcacheManager.getCache(cacheName);
+			cache.put(1, Math.random());
+			cache.get(1);
+			cache.get(0);
+			final MutableConfiguration<Object, Object> conf2 = new MutableConfiguration<>();
+			conf2.setManagementEnabled(false);
+			conf2.setStatisticsEnabled(false);
+			jcacheManager.createCache(cacheName2, conf2);
+
+			// JavaInformations doit être réinstancié pour récupérer les caches
+			final List<JavaInformations> javaInformationsList2 = Collections
+					.singletonList(new JavaInformations(null, true));
+			final HtmlReport htmlReport = new HtmlReport(collector, null, javaInformationsList2,
+					Period.TOUT, writer);
+			htmlReport.toHtml(null, null);
+			assertNotEmptyAndClear(writer);
+			setProperty(Parameter.SYSTEM_ACTIONS_ENABLED, "false");
+			htmlReport.toHtml(null, null);
+			assertNotEmptyAndClear(writer);
+		} finally {
+			setProperty(Parameter.SYSTEM_ACTIONS_ENABLED, null);
+			jcacheManager.destroyCache(cacheName);
+			jcacheManager.destroyCache(cacheName2);
+		}
+	}
+
+	/** Test.
 	 * @throws IOException e
 	 * @throws SchedulerException e */
 	@Test
@@ -463,30 +532,24 @@ public class TestHtmlReport {
 			final Random random = new Random();
 
 			//Define a Trigger that will fire "later"
-			final JobDetail job2 = new JobDetail("job" + random.nextInt(), null, JobTestImpl.class);
-			final SimpleTrigger trigger2 = new SimpleTrigger("trigger" + random.nextInt(), null,
-					new Date(System.currentTimeMillis() + 60000));
-			trigger2.setRepeatInterval(2 * 24L * 60 * 60 * 1000);
+			final JobDetail job2 = JobBuilder.newJob(JobTestImpl.class)
+					.withIdentity("job" + random.nextInt()).build();
+			final Trigger trigger2 = TriggerBuilder.newTrigger()
+					.withIdentity("trigger" + random.nextInt())
+					.startAt(new Date(System.currentTimeMillis() + 60000))
+					.withSchedule(SimpleScheduleBuilder.simpleSchedule().withIntervalInHours(48)
+							.repeatForever())
+					.build();
 			scheduler.scheduleJob(job2, trigger2);
-			scheduler.pauseJob(job2.getName(), job2.getGroup());
-			try {
-				final JobDetail job3 = new JobDetail("job" + random.nextInt(), null,
-						JobTestImpl.class);
-				// cron trigger that will never fire
-				final Trigger trigger3 = new CronTrigger("crontrigger" + random.nextInt(), null,
-						"0 0 0 * * ? 2030");
-				scheduler.scheduleJob(job3, trigger3);
+			scheduler.pauseJob(job2.getKey());
 
-				// other trigger that will never fire
-				final NthIncludedDayTrigger trigger4 = new NthIncludedDayTrigger(
-						"nth trigger" + random.nextInt(), null);
-				trigger4.setN(1);
-				trigger4.setIntervalType(NthIncludedDayTrigger.INTERVAL_TYPE_YEARLY);
-				trigger4.setJobName(job3.getName());
-				scheduler.scheduleJob(trigger4);
-			} catch (final ParseException e) {
-				throw new IllegalStateException(e);
-			}
+			final JobDetail job3 = JobBuilder.newJob(JobTestImpl.class)
+					.withIdentity("job" + random.nextInt()).build();
+			// cron trigger that will never fire
+			final Trigger trigger3 = TriggerBuilder.newTrigger()
+					.withIdentity("crontrigger" + random.nextInt())
+					.withSchedule(CronScheduleBuilder.cronSchedule("0 0 0 * * ? 2030")).build();
+			scheduler.scheduleJob(job3, trigger3);
 
 			// JavaInformations doit être réinstancié pour récupérer les jobs
 			// (mais "Aucun job" dans le counter)
@@ -499,30 +562,26 @@ public class TestHtmlReport {
 
 			// on lance 10 jobs pour être à peu près sûr qu'il y en a un qui fait une erreur
 			// (aléatoirement il y en a 2/10 qui font une erreur)
-			final Map<JobDetail, SimpleTrigger> triggersByJob = new LinkedHashMap<JobDetail, SimpleTrigger>();
 			for (int i = 0; i < 10; i++) {
 				//Define a Trigger that will fire "now"
-				final JobDetail job = new JobDetail("job" + random.nextInt(), null,
-						JobTestImpl.class);
-				job.setDescription("description");
+				final JobDetail job = JobBuilder.newJob(JobTestImpl.class)
+						.withIdentity("job" + random.nextInt()).withDescription("description")
+						.build();
 
-				final SimpleTrigger trigger = new SimpleTrigger("trigger" + random.nextInt(), null,
-						new Date());
+				final Trigger trigger = TriggerBuilder.newTrigger()
+						.withIdentity("trigger" + random.nextInt()).startNow()
+						// pour que les jobs restent en cours après la 1ère exécution
+						.withSchedule(SimpleScheduleBuilder.simpleSchedule()
+								.withIntervalInMinutes(1).repeatForever())
+						.build();
 				//Schedule the job with the trigger
 				scheduler.scheduleJob(job, trigger);
-				triggersByJob.put(job, trigger);
 			}
 			// JobTestImpl fait un sleep de 2s au plus, donc on attend les jobs pour les compter
 			try {
 				Thread.sleep(3000);
 			} catch (final InterruptedException e) {
 				throw new IllegalStateException(e);
-			}
-
-			for (final Map.Entry<JobDetail, SimpleTrigger> entry : triggersByJob.entrySet()) {
-				// et on les relance pour qu'ils soient en cours
-				entry.getValue().setRepeatInterval(60000);
-				scheduler.scheduleJob(entry.getKey(), entry.getValue());
 			}
 
 			// JavaInformations doit être réinstancié pour récupérer les jobs
@@ -575,24 +634,22 @@ public class TestHtmlReport {
 	@Test
 	public void testHtmlCounterRequestContext() throws IOException {
 		// cas où counterReportsByCounterName est null
-		assertNotNull("HtmlCounterRequestContextReport",
-				new HtmlCounterRequestContextReport(Collections.<CounterRequestContext> emptyList(),
-						null, Collections.<ThreadInformations> emptyList(), true, 500, writer));
+		assertNotNull("HtmlCounterRequestContextReport", new HtmlCounterRequestContextReport(
+				Collections.emptyList(), null, Collections.emptyList(), true, 500, writer));
 
 		// aucune requête en cours
 		final HtmlCounterRequestContextReport report = new HtmlCounterRequestContextReport(
-				Collections.<CounterRequestContext> emptyList(),
-				Collections.<String, HtmlCounterReport> emptyMap(),
-				Collections.<ThreadInformations> emptyList(), true, 500, writer);
+				Collections.emptyList(), Collections.emptyMap(), Collections.emptyList(), true, 500,
+				writer);
 		report.toHtml();
 		assertNotEmptyAndClear(writer);
 
 		// cas où nb requêtes en cours > maxContextDisplayed
-		final List<CounterRequestContext> counterRequestContexts = Collections.singletonList(
-				new CounterRequestContext(sqlCounter, null, "Test", "Test", null, null, -1, -1));
+		final List<CounterRequestContext> counterRequestContexts = Collections
+				.singletonList(new CounterRequestContext(sqlCounter, null, "Test", "Test", null,
+						null, -1, -1, "sessionId"));
 		final HtmlCounterRequestContextReport report2 = new HtmlCounterRequestContextReport(
-				counterRequestContexts, null, Collections.<ThreadInformations> emptyList(), true, 0,
-				writer);
+				counterRequestContexts, null, Collections.emptyList(), true, 0, writer);
 		report2.toHtml();
 		assertNotEmptyAndClear(writer);
 

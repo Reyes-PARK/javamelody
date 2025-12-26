@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.util.Date;
 
@@ -92,9 +93,9 @@ public class MHtmlWriter extends MPrinter {
 	 */
 	protected void writeHtml(final MBasicTable table, final OutputStream outputStream,
 			final boolean isSelection) throws IOException {
-		final Writer out = new OutputStreamWriter(outputStream, "UTF-8");
+		final Writer out = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
 
-		final String eol = isSelection ? "\n" : System.getProperty("line.separator");
+		final String eol = isSelection ? "\n" : System.lineSeparator();
 		// eol = "\n" si sélection, "\r\n" sinon pour un fichier windows et "\n" pour un fichier unix
 
 		out.write("<!-- Fichier genere par ");

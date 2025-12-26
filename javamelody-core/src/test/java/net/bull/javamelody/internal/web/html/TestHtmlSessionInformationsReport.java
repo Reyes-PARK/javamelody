@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -55,7 +55,7 @@ public class TestHtmlSessionInformationsReport {
 	 * @throws IOException e */
 	@Test
 	public void testSessionsInformations() throws IOException {
-		final List<SessionInformations> sessions = new ArrayList<SessionInformations>();
+		final List<SessionInformations> sessions = new ArrayList<>();
 		sessions.add(new SessionInformations(new SessionTestImpl(true), false));
 		sessions.add(new SessionInformations(new SessionTestImpl(false), false));
 		final SessionTestImpl serializableButNotSession = new SessionTestImpl(true);
@@ -66,8 +66,7 @@ public class TestHtmlSessionInformationsReport {
 				System.currentTimeMillis());
 		sessions.add(new SessionInformations(mySession, false));
 		final StringWriter writer = new StringWriter();
-		new HtmlSessionInformationsReport(Collections.<SessionInformations> emptyList(), writer)
-				.toHtml();
+		new HtmlSessionInformationsReport(Collections.emptyList(), writer).toHtml();
 		assertNotEmptyAndClear(writer);
 
 		try {

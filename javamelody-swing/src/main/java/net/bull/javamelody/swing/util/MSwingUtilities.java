@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -52,6 +52,7 @@ public final class MSwingUtilities {
 	 * Affiche la trace de l'exception dans la console d'erreur et affiche une boîte de dialogue pour afficher l'exception.
 	 * @param throwable Throwable
 	 */
+	@SuppressWarnings("resource")
 	public static void showException(Throwable throwable) {
 		throwable.printStackTrace(getSystemErrorStream());
 		JOptionPane.showMessageDialog(null, throwable.toString(),
@@ -134,6 +135,7 @@ public final class MSwingUtilities {
 	 *           JComponent
 	 * @return la Frame créée
 	 */
+	@SuppressWarnings("resource")
 	public static JFrame run(final JComponent component) {
 		final JFrame frame = new JFrame();
 		try {

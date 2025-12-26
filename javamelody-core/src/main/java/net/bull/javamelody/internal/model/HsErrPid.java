@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -22,7 +22,6 @@ import java.io.FilenameFilter;
 import java.io.Serializable;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
@@ -32,33 +31,22 @@ import java.util.List;
  * @author Emeric Vernat
  */
 public final class HsErrPid implements Serializable {
+	/**
+	 * Comparateur de HsErrPid par dates décroissantes.
+	 */
+	static final Comparator<HsErrPid> HS_ERR_PID_COMPARATOR = Comparator
+			.comparing(HsErrPid::getDate).reversed();
+
 	private static final String XX_ERROR_FILE = "-XX:ErrorFile=";
 
 	private static final long serialVersionUID = 1L;
 
-	private static final FilenameFilter FILENAME_FILTER = new FilenameFilter() {
-		@Override
-		public boolean accept(File dir, String name) {
-			return name.startsWith("hs_err_pid") && name.endsWith(".log");
-		}
-	};
+	private static final FilenameFilter FILENAME_FILTER = (dir,
+			name) -> name.startsWith("hs_err_pid") && name.endsWith(".log");
 
 	private final String file;
 
 	private final Date date;
-
-	/**
-	 * Comparateur de HsErrPid par date.
-	 */
-	static final class HsErrPidComparator implements Comparator<HsErrPid>, Serializable {
-		private static final long serialVersionUID = 1L;
-
-		/** {@inheritDoc} */
-		@Override
-		public int compare(HsErrPid hsErrPid1, HsErrPid hsErrPid2) {
-			return hsErrPid2.getDate().compareTo(hsErrPid1.getDate());
-		}
-	}
 
 	private HsErrPid(String file, Date date) {
 		super();
@@ -67,7 +55,7 @@ public final class HsErrPid implements Serializable {
 	}
 
 	public static List<HsErrPid> buildHsErrPidList() {
-		final List<File> directories = new ArrayList<File>();
+		final List<File> directories = new ArrayList<>();
 		// locations of fatal error log:
 		// http://www.oracle.com/technetwork/java/javase/felog-138657.html
 		directories.add(new File("./"));
@@ -89,7 +77,7 @@ public final class HsErrPid implements Serializable {
 			}
 		}
 
-		final List<HsErrPid> result = new ArrayList<HsErrPid>();
+		final List<HsErrPid> result = new ArrayList<>();
 		for (final File dir : directories) {
 			final File[] files = dir.listFiles(FILENAME_FILTER);
 			if (files != null) {
@@ -102,14 +90,14 @@ public final class HsErrPid implements Serializable {
 	}
 
 	public static List<HsErrPid> getHsErrPidList(List<JavaInformations> javaInformationsList) {
-		final List<HsErrPid> result = new ArrayList<HsErrPid>();
+		final List<HsErrPid> result = new ArrayList<>();
 		for (final JavaInformations javaInformations : javaInformationsList) {
 			final List<HsErrPid> hsErrPidList = javaInformations.getHsErrPidList();
 			if (hsErrPidList != null) {
 				result.addAll(hsErrPidList);
 			}
 		}
-		Collections.sort(result, new HsErrPidComparator());
+		result.sort(HS_ERR_PID_COMPARATOR);
 		return result;
 	}
 

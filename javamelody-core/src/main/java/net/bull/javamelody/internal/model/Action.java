@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -27,14 +27,17 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import javax.cache.Cache.Entry;
+import javax.cache.Caching;
+import javax.cache.spi.CachingProvider;
 import javax.management.JMException;
 import javax.management.ObjectName;
 import javax.management.openmbean.CompositeData;
-import javax.servlet.http.HttpSession;
 
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
 
+import jakarta.servlet.http.HttpSession;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.SessionListener;
 import net.bull.javamelody.internal.common.I18N;
@@ -81,6 +84,15 @@ public enum Action {
 	/** Purge la clé d'un cache. */
 	CLEAR_CACHE_KEY("caches"),
 
+	/** Purge le contenu de tous les jcaches. */
+	CLEAR_JCACHES("caches"),
+
+	/** Purge le contenu  d'un jcache. */
+	CLEAR_JCACHE("caches"),
+
+	/** Purge la clé d'un jcache. */
+	CLEAR_JCACHE_KEY("caches"),
+
 	/** Tue un thread java. */
 	KILL_THREAD("threads"),
 
@@ -106,6 +118,7 @@ public enum Action {
 			.getInputArguments().contains("-XX:+DisableExplicitGC");
 
 	static final String JAVA_VENDOR = System.getProperty("java.vendor");
+	static final String JAVA_VM_VENDOR = System.getProperty("java.vm.vendor");
 
 	private static final String ALL = "all";
 
@@ -205,7 +218,7 @@ public enum Action {
 			}
 			break;
 		case HEAP_DUMP:
-			if (JAVA_VENDOR.contains("IBM")) {
+			if (JAVA_VENDOR.contains("IBM") || JAVA_VM_VENDOR.contains("OpenJ9")) {
 				ibmHeapDump();
 				messageForReport = I18N.getString("heap_dump_genere_ibm");
 			} else {
@@ -260,6 +273,18 @@ public enum Action {
 			break;
 		case CLEAR_CACHE_KEY:
 			clearCacheKey(cacheId, cacheKey);
+			messageForReport = I18N.getFormattedString("cache_key_purge", cacheId, cacheKey);
+			break;
+		case CLEAR_JCACHES:
+			clearJCaches();
+			messageForReport = I18N.getString("caches_purges");
+			break;
+		case CLEAR_JCACHE:
+			clearJCache(cacheId);
+			messageForReport = I18N.getFormattedString("cache_purge", cacheId);
+			break;
+		case CLEAR_JCACHE_KEY:
+			clearJCacheKey(cacheId, cacheKey);
 			messageForReport = I18N.getFormattedString("cache_key_purge", cacheId, cacheKey);
 			break;
 		case KILL_THREAD:
@@ -345,7 +370,7 @@ public enum Action {
 		return "Mail sent with pdf report for the day to admins";
 	}
 
-	private File heapDump() throws IOException {
+	private File heapDump() {
 		try {
 			final ObjectName objectName = new ObjectName(
 					"com.sun.management:type=HotSpotDiagnostic");
@@ -451,6 +476,51 @@ public enum Action {
 						if (key != null && key.toString().equals(cacheKey)) {
 							cache.remove(key);
 							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	private void clearJCaches() {
+		for (final CachingProvider cachingProvider : Caching.getCachingProviders()) {
+			final javax.cache.CacheManager cacheManager = cachingProvider.getCacheManager();
+			for (final String cacheName : cacheManager.getCacheNames()) {
+				cacheManager.getCache(cacheName).clear();
+			}
+		}
+	}
+
+	private void clearJCache(String cacheId) {
+		for (final CachingProvider cachingProvider : Caching.getCachingProviders()) {
+			final javax.cache.CacheManager cacheManager = cachingProvider.getCacheManager();
+			for (final String cacheName : cacheManager.getCacheNames()) {
+				if (cacheName.equals(cacheId)) {
+					// getCache may never return null
+					cacheManager.getCache(cacheId).clear();
+					break;
+				}
+			}
+		}
+	}
+
+	private void clearJCacheKey(String cacheId, String cacheKey) {
+		for (final CachingProvider cachingProvider : Caching.getCachingProviders()) {
+			final javax.cache.CacheManager cacheManager = cachingProvider.getCacheManager();
+			for (final String cacheName : cacheManager.getCacheNames()) {
+				if (cacheName.equals(cacheId)) {
+					// getCache may never return null
+					final javax.cache.Cache<Object, Object> cache = cacheManager.getCache(cacheId);
+					final boolean removed = cache.remove(cacheKey);
+					if (!removed) {
+						// if keys are not Strings, we have to find the initial key
+						for (final Entry<Object, Object> entry : cache) {
+							final Object key = entry.getKey();
+							if (key != null && key.toString().equals(cacheKey)) {
+								cache.remove(key);
+								break;
+							}
 						}
 					}
 				}

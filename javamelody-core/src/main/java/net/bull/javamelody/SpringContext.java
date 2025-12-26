@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,7 +17,6 @@
  */
 package net.bull.javamelody;
 
-import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.beans.BeansException;
@@ -59,7 +58,7 @@ public class SpringContext implements ApplicationContextAware {
 	 * @return List des noms de beans Spring.
 	 */
 	public List<String> getBeanDefinitionNames() {
-		return Arrays.asList(context.getBeanDefinitionNames());
+		return List.of(context.getBeanDefinitionNames());
 	}
 
 	/**

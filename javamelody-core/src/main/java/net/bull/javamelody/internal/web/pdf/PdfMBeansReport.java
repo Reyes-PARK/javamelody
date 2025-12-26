@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -98,10 +98,8 @@ class PdfMBeansReport extends PdfAbstractReport {
 			mbeanName = mbeanName.substring(indexOfComma + 1);
 			addText(mbeanName);
 			margin += 13;
-			writeAttributes(mbean);
-		} else {
-			writeAttributes(mbean);
 		}
+		writeAttributes(mbean);
 	}
 
 	private void writeAttributes(MBeanNode mbean) throws DocumentException {

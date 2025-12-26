@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -25,16 +25,22 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.util.Arrays;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Timer;
 
 import javax.imageio.ImageIO;
 
 import org.jrobin.core.ConsolFuns;
+import org.jrobin.core.FetchRequest;
 import org.jrobin.core.RrdBackendFactory;
 import org.jrobin.core.RrdDb;
 import org.jrobin.core.RrdDbPool;
@@ -68,6 +74,7 @@ public final class JRobin {
 	private static final int HOUR = 60 * 60;
 	private static final int DAY = 24 * HOUR;
 	private static final int DEFAULT_OBSOLETE_GRAPHS_DAYS = 90;
+	private static final int DEFAULT_MAX_RRD_DISK_USAGE_MB = 20;
 
 	// pool of open RRD files
 	private final RrdDbPool rrdPool = getRrdDbPool();
@@ -139,9 +146,19 @@ public final class JRobin {
 		RrdNioBackend.setFileSyncTimer(timer);
 
 		try {
-			if (!RrdBackendFactory.getDefaultFactory().getFactoryName()
-					.equals(RrdNioBackendFactory.FACTORY_NAME)) {
-				RrdBackendFactory.registerAndSetAsDefaultFactory(new RrdNioBackendFactory());
+			final boolean java22OrLater = "22".compareTo(Parameters.JAVA_VERSION) < 0;
+			if (java22OrLater) {
+				// we can use Foreign Function and Memory api since java 22
+				RrdFfmBackend.setFileSyncTimer(timer);
+				if (!RrdBackendFactory.getDefaultFactory().getFactoryName()
+						.equals(RrdFfmBackendFactory.FACTORY_NAME)) {
+					RrdBackendFactory.registerAndSetAsDefaultFactory(new RrdFfmBackendFactory());
+				}
+			} else {
+				if (!RrdBackendFactory.getDefaultFactory().getFactoryName()
+						.equals(RrdNioBackendFactory.FACTORY_NAME)) {
+					RrdBackendFactory.registerAndSetAsDefaultFactory(new RrdNioBackendFactory());
+				}
 			}
 		} catch (final RrdException e) {
 			throw createIOException(e);
@@ -406,7 +423,7 @@ public final class JRobin {
 				addValue(value);
 			}
 			throw createIOException(e);
-		} catch (final IllegalArgumentException e) {
+		} catch (final IllegalArgumentException | ArithmeticException e) {
 			// catch IllegalArgumentException for issue 533:
 			//			java.lang.IllegalArgumentException
 			//			at java.nio.Buffer.position(Buffer.java:244)
@@ -415,16 +432,7 @@ public final class JRobin {
 			//			at org.jrobin.core.RrdDbPool.requestRrdDb(RrdDbPool.java:103)
 			//			at net.bull.javamelody.JRobin.addValue(JRobin.java:334)
 
-			// le fichier RRD a été corrompu, par exemple en tuant le process java au milieu
-			// d'un write, donc on efface le fichier corrompu et on le recrée pour corriger
-			// le problème
-			LOG.debug("A JRobin file was found corrupted and was reset: "
-					+ new File(rrdFileName).getPath());
-			resetFile();
-			addValue(value);
-			throw createIOException(e);
-		} catch (final ArithmeticException e) {
-			// catch ArithmeticException for issue 139 / JENKINS-51590:
+			// ou catch ArithmeticException for issue 139 / JENKINS-51590:
 			//		java.lang.ArithmeticException : / by zero
 			//		at org.jrobin.core.Archive.archive(Archive.java:129)
 			//		at org.jrobin.core.RrdDb.archive(RrdDb.java:720)
@@ -433,7 +441,7 @@ public final class JRobin {
 			//		at org.jrobin.core.Sample.update(Sample.java:228)
 			//		at net.bull.javamelody.internal.model.JRobin.addValue(JRobin.java:374)
 
-			// le fichier RRD a probablement été corrompu, par exemple en tuant le process java au milieu
+			// le fichier RRD a été corrompu, par exemple en tuant le process java au milieu
 			// d'un write, donc on efface le fichier corrompu et on le recrée pour corriger
 			// le problème
 			LOG.debug("A JRobin file was found corrupted and was reset: "
@@ -450,6 +458,50 @@ public final class JRobin {
 			final RrdDb rrdDb = rrdPool.requestRrdDb(rrdFileName);
 			try {
 				return rrdDb.getLastDatasourceValue(getDataSourceName());
+			} finally {
+				// release RRD database reference
+				rrdPool.release(rrdDb);
+			}
+		} catch (final RrdException e) {
+			throw createIOException(e);
+		}
+	}
+
+	public void dumpXml(OutputStream output, Range range) throws IOException {
+		try {
+			// request RRD database reference from the pool
+			final RrdDb rrdDb = rrdPool.requestRrdDb(rrdFileName);
+			try {
+				if (range.getPeriod() == Period.TOUT) {
+					rrdDb.exportXml(output);
+				} else {
+					final FetchRequest fetchRequest = rrdDb.createFetchRequest(
+							ConsolFuns.CF_AVERAGE, range.getJRobinStartTime(),
+							range.getJRobinEndTime());
+					final String xml = fetchRequest.fetchData().exportXml()
+							.replaceFirst("<file>.*</file>", "");
+					output.write(xml.getBytes(StandardCharsets.UTF_8));
+				}
+			} finally {
+				// release RRD database reference
+				rrdPool.release(rrdDb);
+			}
+		} catch (final RrdException e) {
+			throw createIOException(e);
+		}
+	}
+
+	public String dumpTxt(Range range) throws IOException {
+		try {
+			// request RRD database reference from the pool
+			final RrdDb rrdDb = rrdPool.requestRrdDb(rrdFileName);
+			try {
+				if (range.getPeriod() == Period.TOUT) {
+					return rrdDb.dump();
+				}
+				final FetchRequest fetchRequest = rrdDb.createFetchRequest(ConsolFuns.CF_AVERAGE,
+						range.getJRobinStartTime(), range.getJRobinEndTime());
+				return fetchRequest.fetchData().dump();
 			} finally {
 				// release RRD database reference
 				rrdPool.release(rrdDb);
@@ -526,41 +578,83 @@ public final class JRobin {
 		return new IOException(e.getMessage(), e);
 	}
 
-	static long deleteObsoleteJRobinFiles(String application) throws IOException {
+	static long deleteObsoleteJRobinFiles(String application) {
 		final Calendar nowMinusThreeMonthsAndADay = Calendar.getInstance();
 		nowMinusThreeMonthsAndADay.add(Calendar.DAY_OF_YEAR, -getObsoleteGraphsDays());
 		nowMinusThreeMonthsAndADay.add(Calendar.DAY_OF_YEAR, -1);
 		final long timestamp = Util.getTimestamp(nowMinusThreeMonthsAndADay);
-		final RrdDbPool rrdPool = getRrdDbPool();
 		final int counterRequestIdLength = new CounterRequest("", "").getId().length();
 		long diskUsage = 0;
-		for (final File file : listRrdFiles(application)) {
+		final Map<String, Long> lastUpdateTimesByPath = new HashMap<>();
+		final List<File> rrdFiles = new ArrayList<>(listRrdFiles(application));
+		for (final File file : rrdFiles) {
 			// on ne supprime que les fichiers rrd de requêtes (les autres sont peu nombreux)
 			if (file.getName().length() > counterRequestIdLength
 					&& file.lastModified() < nowMinusThreeMonthsAndADay.getTimeInMillis()) {
-				try {
-					final RrdDb rrdDb = rrdPool.requestRrdDb(file.getPath());
-					final boolean obsolete = rrdDb.getLastUpdateTime() < timestamp;
-					rrdPool.release(rrdDb);
-					boolean deleted = false;
-					if (obsolete) {
-						deleted = file.delete();
-					}
-					if (!deleted) {
-						diskUsage += file.length();
-					}
-				} catch (final IOException e) {
-					continue;
-				} catch (final RrdException e) {
-					continue;
+				final long lastUpdateTime = getLastUpdateTime(file);
+				lastUpdateTimesByPath.put(file.getPath(), lastUpdateTime);
+				final boolean obsolete = lastUpdateTime < timestamp;
+				boolean deleted = false;
+				if (obsolete) {
+					deleted = file.delete();
+				}
+				if (!deleted) {
+					diskUsage += file.length();
 				}
 			} else {
 				diskUsage += file.length();
 			}
 		}
+		final long maxRrdDiskUsage = getMaxRrdDiskUsageMb() * 1024L * 1024L;
+		if (diskUsage > maxRrdDiskUsage) {
+			// sort rrd files from least to most recently used
+			for (final File file : rrdFiles) {
+				if (lastUpdateTimesByPath.get(file.getPath()) == null) {
+					lastUpdateTimesByPath.put(file.getPath(), getLastUpdateTime(file));
+				}
+			}
+			rrdFiles.sort(Comparator.comparing(file -> lastUpdateTimesByPath.get(file.getPath())));
+			// delete least recently used rrd files until rrd disk usage < 20 MB
+			for (final File file : rrdFiles) {
+				if (diskUsage < maxRrdDiskUsage) {
+					break;
+				}
+				if (file.getName().length() > counterRequestIdLength) {
+					final long length = file.length();
+					if (file.delete()) {
+						diskUsage -= length;
+					}
+				}
+			}
+		}
 
-		// on retourne true si tous les fichiers .rrd obsolètes ont été supprimés, false sinon
 		return diskUsage;
+	}
+
+	private static long getLastUpdateTime(File file) {
+		try {
+			final RrdDbPool rrdPool = getRrdDbPool();
+			final RrdDb rrdDb = rrdPool.requestRrdDb(file.getPath());
+			final long lastUpdateTime = rrdDb.getLastUpdateTime();
+			rrdPool.release(rrdDb);
+			return lastUpdateTime;
+		} catch (final IOException | RrdException e) {
+			return file.lastModified() / 1000L;
+		}
+	}
+
+	private static long getMaxRrdDiskUsageMb() {
+		final String param = Parameters.getParameterValue(Parameter.MAX_RRD_DISK_USAGE_MB);
+		if (param != null) {
+			// lance une NumberFormatException si ce n'est pas un nombre
+			final int result = Integer.parseInt(param);
+			if (result <= 0) {
+				throw new IllegalStateException(
+						"The parameter max-rrd-disk-usage-mb should be > 0 (20 recommended)");
+			}
+			return result;
+		}
+		return DEFAULT_MAX_RRD_DISK_USAGE_MB;
 	}
 
 	/**
@@ -595,7 +689,7 @@ public final class JRobin {
 		if (files == null) {
 			return Collections.emptyList();
 		}
-		return Arrays.asList(files);
+		return List.of(files);
 	}
 
 	private static RrdDbPool getRrdDbPool() throws IOException {

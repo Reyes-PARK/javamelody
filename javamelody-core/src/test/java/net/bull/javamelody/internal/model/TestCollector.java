@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -29,12 +29,13 @@ import java.net.URL;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Timer;
 
+import javax.cache.Caching;
+import javax.cache.configuration.MutableConfiguration;
 import javax.management.JMException;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -42,6 +43,7 @@ import javax.management.ObjectName;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
@@ -109,7 +111,7 @@ public class TestCollector {
 		assertToStringNotEmpty("java", new JavaInformations(null, false));
 		assertToStringNotEmpty("thread",
 				new ThreadInformations(Thread.currentThread(),
-						Arrays.asList(Thread.currentThread().getStackTrace()), 100, 1000, false,
+						List.of(Thread.currentThread().getStackTrace()), 100, 1000, false,
 						Parameters.getHostAddress()));
 		assertToStringNotEmpty("session", new SessionInformations(new SessionTestImpl(true), true));
 		assertToStringNotEmpty("memory", new MemoryInformations());
@@ -120,8 +122,17 @@ public class TestCollector {
 		} finally {
 			CacheManager.getInstance().shutdown();
 		}
+		final MutableConfiguration<Object, Object> conf = new MutableConfiguration<>();
+		conf.setManagementEnabled(true);
+		conf.setStatisticsEnabled(true);
+		Caching.getCachingProvider().getCacheManager().createCache("cache", conf);
+		try {
+			assertToStringNotEmpty("cache", new JCacheInformations("cache"));
+		} finally {
+			Caching.getCachingProvider().getCacheManager().close();
+		}
 		final Scheduler scheduler = StdSchedulerFactory.getDefaultScheduler();
-		final JobDetail job = new JobDetail("job", null, JobTestImpl.class);
+		final JobDetail job = JobBuilder.newJob(JobTestImpl.class).withIdentity("job").build();
 		assertToStringNotEmpty("job", new JobInformations(job, null, scheduler));
 		assertToStringNotEmpty("connectionInfos", new ConnectionInformations());
 	}
@@ -166,8 +177,8 @@ public class TestCollector {
 		final Counter strutsCounter = new Counter(Counter.STRUTS_COUNTER_NAME, null);
 		final Counter jobCounter = new Counter(Counter.JOB_COUNTER_NAME, null);
 		final Collector collector = new Collector(TEST,
-				Arrays.asList(counter, jspCounter, strutsCounter, jobCounter));
-		if (collector.getCounters().size() == 0) {
+				List.of(counter, jspCounter, strutsCounter, jobCounter));
+		if (collector.getCounters().isEmpty()) {
 			fail("getCounters");
 		}
 		counter.addRequest("test1", 0, 0, 0, false, 1000);
@@ -198,7 +209,7 @@ public class TestCollector {
 			fail("getLastCollectDuration");
 		}
 
-		if (collector.getCounterJRobins().size() == 0) {
+		if (collector.getCounterJRobins().isEmpty()) {
 			fail("getCounterJRobins");
 		}
 		final Range range = Period.JOUR.getRange();
@@ -230,7 +241,7 @@ public class TestCollector {
 	@Test
 	public void testCollectTomcatInformations() throws JMException {
 		final MBeanServer mBeanServer = MBeans.getPlatformMBeanServer();
-		final List<ObjectName> mBeans = new ArrayList<ObjectName>();
+		final List<ObjectName> mBeans = new ArrayList<>();
 		try {
 			mBeans.add(mBeanServer
 					.registerMBean(new ThreadPool(),
@@ -243,8 +254,7 @@ public class TestCollector {
 											"Catalina:type=GlobalRequestProcessor,name=jk-8009"))
 							.getObjectName());
 			TomcatInformations.initMBeans();
-			final Collector collector = new Collector(TEST,
-					Arrays.asList(new Counter("http", null)));
+			final Collector collector = new Collector(TEST, List.of(new Counter("http", null)));
 			// first time to initialize against NOT_A_NUMBER
 			collector.collectWithoutErrors(
 					Collections.singletonList(new JavaInformations(null, true)));
@@ -272,13 +282,13 @@ public class TestCollector {
 		for (int i = 0; i < 50; i++) {
 			counter.addRequest("test 3", 0, 0, 0, false, 1000);
 		}
-		collector.collectWithoutErrors(Collections.<JavaInformations> emptyList());
+		collector.collectWithoutErrors(Collections.emptyList());
 		if (counter.getRequestsCount() > 1) {
 			fail("removeRequest");
 		}
 		counter.addRequest("test 1", 0, 0, 0, false, 1000);
 		counter.addRequest("test 2", 0, 0, 0, false, 1000);
-		collector.collectWithoutErrors(Collections.<JavaInformations> emptyList());
+		collector.collectWithoutErrors(Collections.emptyList());
 		if (counter.getRequestsCount() > 1) {
 			fail("removeRequest");
 		}
@@ -290,7 +300,7 @@ public class TestCollector {
 		}
 		counter.addRequest("test 3", 0, 0, 0, false, 1000);
 		counter.addRequest("test 4", 0, 0, 0, false, 1000);
-		collector.collectWithoutErrors(Collections.<JavaInformations> emptyList());
+		collector.collectWithoutErrors(Collections.emptyList());
 		if (counter.getRequestsCount() > 1) {
 			fail("removeRequest");
 		}
@@ -326,7 +336,7 @@ public class TestCollector {
 	public void testGetRangeCountersToBeDisplayed() throws IOException {
 		final Counter counter = createCounter();
 		final Collector collector = new Collector(TEST, Collections.singletonList(counter));
-		if (collector.getCounters().size() == 0) {
+		if (collector.getCounters().isEmpty()) {
 			fail("getCounters");
 		}
 		final JavaInformations javaInformations = new JavaInformations(null, true);
@@ -354,7 +364,7 @@ public class TestCollector {
 	public void testGetRangeCounter() throws IOException {
 		final Counter counter = createCounter();
 		final Counter counter2 = new Counter("sql", null);
-		final Collector collector = new Collector(TEST, Arrays.asList(counter, counter2));
+		final Collector collector = new Collector(TEST, List.of(counter, counter2));
 		collector.getRangeCounter(Period.JOUR.getRange(), counter2.getName());
 		collector.getRangeCounter(Period.TOUT.getRange(), counter2.getName());
 		try {
@@ -369,10 +379,9 @@ public class TestCollector {
 		return collector.getRangeCountersToBeDisplayed(period.getRange()).size();
 	}
 
-	/** Test.
-	 * @throws IOException e */
+	/** Test. */
 	@Test
-	public void testDeleteObsoleteFiles() throws IOException {
+	public void testDeleteObsoleteFiles() {
 		final Collector collector = createCollectorWithOneCounter();
 		collector.deleteObsoleteFiles();
 	}
@@ -382,7 +391,7 @@ public class TestCollector {
 	public void testStop() {
 		final Collector collector = createCollectorWithOneCounter();
 		collector.stop();
-		if (collector.getCounters().size() == 0) {
+		if (collector.getCounters().isEmpty()) {
 			fail("collector.getCounters() ne doit pas être vide après stop");
 		}
 		// on ne risque pas grand chose à tenter de détacher quelque chose que l'on a pas attacher
@@ -426,6 +435,13 @@ public class TestCollector {
 		final Collector collector = new Collector("test", counters, samplingProfiler);
 		assertNotNull("getSamplingProfiler", collector.getSamplingProfiler());
 		assertNotNull("getHotspots", collector.getHotspots());
+		final Collector collector2 = new Collector("test", counters);
+		assertNull("getSamplingProfiler", collector2.getSamplingProfiler());
+		try {
+			assertNull("getHotspots", collector2.getHotspots());
+		} catch (final IllegalStateException e) {
+			assertNotNull("e", e);
+		}
 	}
 
 	/** Test.
@@ -446,7 +462,7 @@ public class TestCollector {
 
 			// pour être sûr qu'il y a une application
 			final List<URL> urls = Parameters
-					.parseUrl("http://localhost/test1,http://localhost:8090/test1");
+					.parseUrls("http://localhost/test1,http://localhost:8090/test1");
 			Parameters.addCollectorApplication(application, urls);
 
 			collectorServer.collectWithoutErrors();
@@ -454,11 +470,8 @@ public class TestCollector {
 			collectorServer.addCollectorApplication(application, urls);
 			collectorServer.collectSessionInformations(application, null);
 			collectorServer.collectSessionInformations(application, "sessionId");
-			final Connection connection = TestDatabaseInformations.initH2();
-			try {
+			try (Connection connection = TestDatabaseInformations.initH2()) {
 				collectorServer.collectDatabaseInformations(application, 0);
-			} finally {
-				connection.close();
 			}
 			collectorServer.collectHeapHistogram(application);
 			collectorServer.collectHotspots(application);

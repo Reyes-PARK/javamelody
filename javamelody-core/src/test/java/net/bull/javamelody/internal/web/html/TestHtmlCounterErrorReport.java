@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -27,11 +27,10 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.util.Collections;
 
-import javax.servlet.http.HttpServletRequest;
-
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.http.HttpServletRequest;
 import net.bull.javamelody.Utils;
 import net.bull.javamelody.internal.model.Counter;
 import net.bull.javamelody.internal.model.CounterError;

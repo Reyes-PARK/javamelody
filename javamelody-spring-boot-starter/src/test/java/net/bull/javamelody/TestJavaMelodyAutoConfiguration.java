@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -24,7 +24,6 @@ import java.util.Map;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -107,13 +106,13 @@ public class TestJavaMelodyAutoConfiguration {
 		for (final MonitoringSpringAdvisor springAdvisor : springAdvisors.values()) {
 			if (springAdvisor.getPointcut() instanceof MonitoredWithAnnotationPointcut) {
 				monitoredWithAdvisorFound = true;
-			} else if (springAdvisor.getPointcut() instanceof AnnotationMatchingPointcut) {
+			} else {
 				stereotypeAdvisorsCount++;
 				// Maybe use synthetic @Service, @Controller and @RestController classes to check if point cuts match.
 			}
 		}
 		assertThat(monitoredWithAdvisorFound).isTrue();
-		assertThat(stereotypeAdvisorsCount).isEqualTo(3);
+		assertThat(stereotypeAdvisorsCount).isEqualTo(4);
 
 		// It should create a bean post-processor for rest templates.
 		final SpringRestTemplateBeanPostProcessor restTemplatePostProcessor = context

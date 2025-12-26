@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -28,33 +28,37 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.servlet.ServletContextEvent;
-import javax.servlet.ServletContextListener;
-import javax.servlet.http.HttpSession;
-import javax.servlet.http.HttpSessionActivationListener;
-import javax.servlet.http.HttpSessionEvent;
-import javax.servlet.http.HttpSessionListener;
-
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletContextEvent;
+import jakarta.servlet.ServletContextListener;
+import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpSessionActivationListener;
+import jakarta.servlet.http.HttpSessionEvent;
+import jakarta.servlet.http.HttpSessionIdListener;
+import jakarta.servlet.http.HttpSessionListener;
 import net.bull.javamelody.internal.common.HttpParameter;
 import net.bull.javamelody.internal.common.LOG;
 import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.model.SessionInformations;
 
 /**
- * Listener de session http ({@link HttpSessionListener}) pour le monitoring.
+ * Listener de session http ({@link HttpSessionListener} et {@link HttpSessionIdListener}) pour le monitoring.
  * C'est la classe de ce listener qui doit être déclarée dans le fichier web.xml de la webapp.
  * Ce listener fait également listener de contexte de servlet ({@link ServletContextListener})
  * et listener de passivation/activation de sessions ({@link HttpSessionActivationListener}).
  * @author Emeric Vernat
  */
-public class SessionListener implements HttpSessionListener, HttpSessionActivationListener,
-		ServletContextListener, Serializable {
+public class SessionListener implements HttpSessionListener, HttpSessionIdListener,
+		HttpSessionActivationListener, ServletContextListener, Serializable {
 	public static final String CSRF_TOKEN_SESSION_NAME = "javamelody."
 			+ HttpParameter.TOKEN.getName();
 	public static final String SESSION_COUNTRY_KEY = "javamelody.country";
 	public static final String SESSION_REMOTE_ADDR = "javamelody.remoteAddr";
 	public static final String SESSION_REMOTE_USER = "javamelody.remoteUser";
 	public static final String SESSION_USER_AGENT = "javamelody.userAgent";
+
+	private static final Comparator<SessionInformations> SESSION_INFORMATIONS_COMPARATOR = Comparator
+			.comparing(SessionInformations::getLastAccess);
 
 	private static final String SESSION_ACTIVATION_KEY = "javamelody.sessionActivation";
 
@@ -63,34 +67,17 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 	private static final AtomicInteger SESSION_COUNT = new AtomicInteger();
 
 	@SuppressWarnings("all")
-	private static final List<String> CONTEXT_PATHS = new ArrayList<String>();
+	private static final List<String> CONTEXT_PATHS = new ArrayList<>();
 
 	// attention : this est mis en session, cette map doit donc restée statique
 	@SuppressWarnings("all")
-	private static final ConcurrentMap<String, HttpSession> SESSION_MAP_BY_ID = new ConcurrentHashMap<String, HttpSession>();
+	private static final ConcurrentMap<String, HttpSession> SESSION_MAP_BY_ID = new ConcurrentHashMap<>();
 
-	private static final ThreadLocal<HttpSession> SESSION_CONTEXT = new ThreadLocal<HttpSession>();
+	private static final ThreadLocal<HttpSession> SESSION_CONTEXT = new ThreadLocal<>();
 
 	private static boolean instanceCreated;
 
 	private boolean instanceEnabled;
-
-	static final class SessionInformationsComparator
-			implements Comparator<SessionInformations>, Serializable {
-		private static final long serialVersionUID = 1L;
-
-		/** {@inheritDoc} */
-		@Override
-		public int compare(SessionInformations session1, SessionInformations session2) {
-			if (session1.getLastAccess().before(session2.getLastAccess())) {
-				return 1;
-			} else if (session1.getLastAccess().after(session2.getLastAccess())) {
-				return -1;
-			} else {
-				return 0;
-			}
-		}
-	}
 
 	/**
 	 * Constructeur.
@@ -190,7 +177,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		final HttpSession session = SESSION_MAP_BY_ID.get(sessionId);
 		if (session == null) {
 			// In some cases (issue 473), Tomcat changes id in session withtout calling sessionCreated.
-			// In servlet 3.1, HttpSessionIdListener.sessionIdChanged could be used.
+			// Perhaps not necessary, since HttpSessionIdListener#sessionIdChanged is now implemented.
 			for (final HttpSession other : SESSION_MAP_BY_ID.values()) {
 				if (other.getId().equals(sessionId)) {
 					return other;
@@ -198,6 +185,12 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 			}
 		}
 		return session;
+	}
+
+	@Override
+	public void sessionIdChanged(HttpSessionEvent event, String oldSessionId) {
+		SESSION_MAP_BY_ID.remove(oldSessionId);
+		SESSION_MAP_BY_ID.put(event.getSession().getId(), event.getSession());
 	}
 
 	private static void removeSessionsWithChangedId() {
@@ -210,6 +203,17 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		}
 	}
 
+	private static void fixSessionsWithChangedId() {
+		for (final Map.Entry<String, HttpSession> entry : SESSION_MAP_BY_ID.entrySet()) {
+			final String id = entry.getKey();
+			final HttpSession other = entry.getValue();
+			if (!id.equals(other.getId())) {
+				SESSION_MAP_BY_ID.remove(id);
+				SESSION_MAP_BY_ID.put(other.getId(), other);
+			}
+		}
+	}
+
 	private static void addSession(final HttpSession session) {
 		SESSION_MAP_BY_ID.put(session.getId(), session);
 	}
@@ -218,15 +222,15 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		final HttpSession removedSession = SESSION_MAP_BY_ID.remove(session.getId());
 		if (removedSession == null) {
 			// In some cases (issue 473), Tomcat changes id in session withtout calling sessionCreated.
-			// In servlet 3.1, HttpSessionIdListener.sessionIdChanged could be used.
-			removeSessionsWithChangedId();
+			// Perhaps not necessary, since HttpSessionIdListener#sessionIdChanged is now implemented.
+			fixSessionsWithChangedId();
+			SESSION_MAP_BY_ID.remove(session.getId());
 		}
 	}
 
 	public static List<SessionInformations> getAllSessionsInformations() {
 		final Collection<HttpSession> sessions = SESSION_MAP_BY_ID.values();
-		final List<SessionInformations> sessionsInformations = new ArrayList<SessionInformations>(
-				sessions.size());
+		final List<SessionInformations> sessionsInformations = new ArrayList<>(sessions.size());
 		for (final HttpSession session : sessions) {
 			try {
 				sessionsInformations.add(new SessionInformations(session, false));
@@ -239,13 +243,10 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		return Collections.unmodifiableList(sessionsInformations);
 	}
 
-	public static List<SessionInformations> sortSessions(
-			List<SessionInformations> sessionsInformations) {
+	public static void sortSessions(List<SessionInformations> sessionsInformations) {
 		if (sessionsInformations.size() > 1) {
-			Collections.sort(sessionsInformations,
-					Collections.reverseOrder(new SessionInformationsComparator()));
+			sessionsInformations.sort(SESSION_INFORMATIONS_COMPARATOR);
 		}
-		return sessionsInformations;
 	}
 
 	public static SessionInformations getSessionInformationsBySessionId(String sessionId) {
@@ -296,7 +297,7 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		// avant d'avoir une ExceptionInInitializerError pour la classe Parameters
 		System.getProperty("java.io.tmpdir");
 
-		final String contextPath = Parameters.getContextPath(event.getServletContext());
+		final String contextPath = event.getServletContext().getContextPath();
 		if (!instanceEnabled) {
 			if (!CONTEXT_PATHS.contains(contextPath)) {
 				// si jars dans tomcat/lib, il y a plusieurs instances mais dans des webapps différentes (issue 193)
@@ -336,6 +337,12 @@ public class SessionListener implements HttpSessionListener, HttpSessionActivati
 		// issue 665: in WildFly 10.1.0, the MonitoringFilter may never be initialized neither destroyed.
 		// For this case, it is needed to stop here the JdbcWrapper initialized in contextInitialized
 		JdbcWrapper.SINGLETON.stop();
+
+		// issue 878: NPE at net.bull.javamelody.JspWrapper.createHttpRequestWrapper
+		if (event.getServletContext().getClass().getName().startsWith("io.undertow")) {
+			// issue 848: NPE after SpringBoot hot restart
+			Parameters.initialize((ServletContext) null);
+		}
 
 		LOG.debug("JavaMelody listener destroy done");
 	}

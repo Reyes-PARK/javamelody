@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -19,7 +19,6 @@ package net.bull.javamelody.swing.table; // NOPMD
 
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.Event;
 import java.awt.Point;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -187,12 +186,10 @@ public class MBasicTable extends JTable {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	protected void createDefaultRenderers() {
 		final Map<Class<?>, TableCellRenderer> map = getDefaultTableCellRenderers();
-		super.defaultRenderersByColumnClass = new Hashtable<Class<?>, TableCellRenderer>(
-				map.size());
+		super.defaultRenderersByColumnClass = new Hashtable<>(map.size());
 		super.defaultRenderersByColumnClass.putAll(map);
 	}
 
@@ -284,8 +281,7 @@ public class MBasicTable extends JTable {
 				text = ((JTextComponent) rendererComponent).getText();
 				text = getToolTipTextIfNoText(text, rendererComponent);
 			} else if (rendererComponent instanceof JCheckBox) {
-				text = String
-						.valueOf(((JCheckBox) rendererComponent).isSelected() ? "vrai" : "faux");
+				text = ((JCheckBox) rendererComponent).isSelected() ? "vrai" : "faux";
 			} else {
 				text = value.toString();
 			}
@@ -312,11 +308,10 @@ public class MBasicTable extends JTable {
 	 */
 	protected void keyPressed(final KeyEvent event) {
 		final int keyCode = event.getKeyCode();
-		final int modifiers = event.getModifiers();
-		if ((modifiers & Event.CTRL_MASK) != 0 && keyCode == KeyEvent.VK_ADD) {
+		if (event.isControlDown() && keyCode == KeyEvent.VK_ADD) {
 			adjustColumnWidths();
 		}
-		// else if (modifiers == 0)
+		// else if (event.getModifiers() == 0)
 		// {
 		// final int selectedColumn = getSelectedColumn() != -1 ? getSelectedColumn() : 0;
 		// final int selectedRow = getSelectedRow() != -1 ? getSelectedRow() : 0;

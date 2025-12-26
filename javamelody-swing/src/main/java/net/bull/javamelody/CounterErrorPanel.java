@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -78,7 +78,7 @@ class CounterErrorPanel extends MelodyPanel {
 					setToolTipText(null);
 				} else {
 					setToolTipText("<html>" + stackTrace.replace("[See nested", "\n[See nested")
-							.replaceAll("\n", "<br/>"));
+							.replace("\n", "<br/>"));
 				}
 			}
 			return this;

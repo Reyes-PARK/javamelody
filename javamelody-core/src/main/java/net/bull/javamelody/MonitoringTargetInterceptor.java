@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -19,7 +19,7 @@ package net.bull.javamelody;
 
 import java.lang.reflect.Method;
 
-import javax.interceptor.InvocationContext;
+import jakarta.interceptor.InvocationContext;
 
 /**
  * Intercepteur pour EJB 3, alternatif à {@link MonitoringInterceptor}.

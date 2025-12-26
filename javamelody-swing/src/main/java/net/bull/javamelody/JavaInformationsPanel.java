@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -203,12 +203,13 @@ class JavaInformationsPanel extends MelodyPanel {
 
 		writeMemoryInformations(javaInformations.getMemoryInformations());
 
-		if (javaInformations.getFreeDiskSpaceInTemp() >= 0) {
-			// on considère que l'espace libre sur le disque dur est celui sur la partition du répertoire temporaire
-			addLabel(getString("Free_disk_space"));
-			addValue(integerFormat.format(javaInformations.getFreeDiskSpaceInTemp() / 1024 / 1024)
-					+ ' ' + getString("Mo"));
-		}
+		// on considère que l'espace libre sur le disque dur est celui sur la partition du répertoire temporaire
+		addLabel(getString("Free_disk_space"));
+		addValue(integerFormat.format(javaInformations.getFreeDiskSpaceInTemp() / 1024 / 1024) + ' '
+				+ getString("Mo"));
+		addLabel(getString("Usable_disk_space"));
+		addValue(integerFormat.format(javaInformations.getUsableDiskSpaceInTemp() / 1024 / 1024)
+				+ ' ' + getString("Mo"));
 
 		writeDatabaseVersionAndDataSourceDetails();
 

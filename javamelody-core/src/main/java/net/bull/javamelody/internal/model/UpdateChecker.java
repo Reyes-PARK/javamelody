@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -118,11 +118,8 @@ public final class UpdateChecker {
 		connection.connect();
 
 		final Properties properties = new Properties();
-		final InputStream input = connection.getInputStream();
-		try {
+		try (InputStream input = connection.getInputStream()) {
 			properties.load(input);
-		} finally {
-			input.close();
 		}
 		final String javamelodyVersion = properties.getProperty("version");
 		if (javamelodyVersion != null && Parameters.JAVAMELODY_VERSION != null
@@ -229,7 +226,7 @@ public final class UpdateChecker {
 	}
 
 	private String getFeaturesUsed(JavaInformations javaInformations) {
-		final List<String> features = new ArrayList<String>();
+		final List<String> features = new ArrayList<>();
 		if (Parameters.isPdfEnabled()) {
 			features.add("pdf");
 		}
@@ -274,17 +271,15 @@ public final class UpdateChecker {
 				result.append(getDatabaseInfo(connection));
 			}
 		} catch (final Exception e) {
-			result.append(e.toString());
+			result.append(e);
 		}
 		return result.toString();
 	}
 
 	private String getDatabaseInfo(final Connection connection) throws SQLException {
-		try {
+		try (connection) {
 			final DatabaseMetaData metaData = connection.getMetaData();
 			return metaData.getDatabaseProductName() + ' ' + metaData.getDatabaseProductVersion();
-		} finally {
-			connection.close();
 		}
 	}
 

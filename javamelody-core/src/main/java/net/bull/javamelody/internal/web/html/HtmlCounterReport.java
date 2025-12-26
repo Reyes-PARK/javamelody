@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -20,7 +20,6 @@ package net.bull.javamelody.internal.web.html;
 import java.io.IOException;
 import java.io.Writer;
 import java.text.DecimalFormat;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -74,7 +73,7 @@ public class HtmlCounterReport extends HtmlAbstractReport {
 			writeRequests(counterName, counter.getChildCounterName(), summaryRequest, false, true,
 					false);
 		} else {
-			final List<CounterRequest> summaryRequests = Arrays.asList(globalRequest,
+			final List<CounterRequest> summaryRequests = List.of(globalRequest,
 					counterRequestAggregation.getWarningRequest(),
 					counterRequestAggregation.getSevereRequest());
 			writeRequests(globalRequest.getName(), counter.getChildCounterName(), summaryRequests,
@@ -85,14 +84,14 @@ public class HtmlCounterReport extends HtmlAbstractReport {
 		writeSizeAndLinks(requests, globalRequest);
 
 		// 3. détails par requêtes (non visible par défaut)
-		writeln("<div id='details" + counterName + "' style='display: none;'>");
+		writeln("<div id='details" + counterName + "' class='displayNone'>");
 		writeRequests(counterName, counter.getChildCounterName(), requests,
 				isRequestGraphDisplayed(counter), true, false);
 		writeln("</div>");
 
 		// 4. logs (non visible par défaut)
 		if (isErrorCounter()) {
-			writeln("<div id='logs" + counterName + "' style='display: none;'><div>");
+			writeln("<div id='logs" + counterName + "' class='displayNone'><div>");
 			new HtmlCounterErrorReport(counter, getWriter()).toHtml();
 			writeln("</div></div>");
 		}
@@ -146,9 +145,10 @@ public class HtmlCounterReport extends HtmlAbstractReport {
 			writeln("<a href='?action=clear_counter&amp;counter=" + counter.getName()
 					+ getCsrfTokenUrlPart() + "' title='"
 					+ getFormattedString("Vider_stats", counter.getName()) + '\'');
-			writeln("class='noPrint' onclick=\"javascript:return confirm('"
-					+ javascriptEncode(getFormattedString("confirm_vider_stats", counter.getName()))
-					+ "');\">#Reinitialiser#</a>");
+			writeln("class='confirm noPrint' data-confirm='"
+					+ htmlEncodeButNotSpaceAndNewLine(
+							getFormattedString("confirm_vider_stats", counter.getName()))
+					+ "'>#Reinitialiser#</a>");
 		}
 		writeln("</div>");
 	}
@@ -290,7 +290,7 @@ public class HtmlCounterReport extends HtmlAbstractReport {
 		}
 		if (counterRequestAggregation.isResponseSizeDisplayed()) {
 			write(nextColumn);
-			write(integerFormat.format(request.getResponseSizeMean() / 1024));
+			write(integerFormat.format(request.getResponseSizeMean() / 1024L));
 		}
 		if (counterRequestAggregation.isChildHitsDisplayed()) {
 			write(nextColumn);

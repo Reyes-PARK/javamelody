@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,9 +17,8 @@
  */
 package net.bull.javamelody.internal.web;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.model.Counter;
 import net.bull.javamelody.internal.model.CounterRequestContext;
@@ -67,8 +66,8 @@ public final class RumInjector implements HtmlToInject {
 		assert lastIndexOfSpace != -1;
 		String tmp = requestName.substring(0, lastIndexOfSpace);
 		// replace each subpath by ".."
-		while (tmp.indexOf("//") != -1) {
-			tmp = tmp.replaceAll("//", "/");
+		while (tmp.contains("//")) {
+			tmp = tmp.replace("//", "/");
 		}
 		tmp = tmp.replaceAll("/[^/]*", "/..");
 		// remove first subpath
@@ -77,7 +76,7 @@ public final class RumInjector implements HtmlToInject {
 		}
 		String tmp2 = tmp + Parameters.getMonitoringPath();
 		// remove first '/', including when tmp == Parameters.getMonitoringPath()
-		while (tmp2.length() > 0 && tmp2.charAt(0) == '/') {
+		while (!tmp2.isEmpty() && tmp2.charAt(0) == '/') {
 			tmp2 = tmp2.substring(1);
 		}
 		return tmp2;
@@ -89,10 +88,10 @@ public final class RumInjector implements HtmlToInject {
 		final String rumUrl = getRumUrlForBrowser(httpRequestName);
 		// approximation of server duration (may not be the real server duration, but not far in general)
 		final long serverTime = System.currentTimeMillis() - start;
-		return "\n<script src='" + rumUrl + "?resource=" + BOOMERANG_FILENAME
-				+ "'></script>\n<script>BOOMR.init({beacon_url: '" + rumUrl
-				+ "?part=rum', log: null});\nBOOMR.addVar('requestName', \"" + httpRequestName
-				+ "\");\n" + "BOOMR.addVar('serverTime', " + serverTime + ");\n</script>\n";
+		return "\n<script id='boomr' type='text/javascript' src='" + rumUrl + "?resource="
+				+ BOOMERANG_FILENAME + "' async='true' data-beacon-url='" + rumUrl
+				+ "?part=rum' data-request-name=\"" + httpRequestName + "\" data-server-time='"
+				+ serverTime + "'></script>\n";
 	}
 
 	private String getHttpRequestName() {

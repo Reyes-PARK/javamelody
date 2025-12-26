@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -78,7 +78,7 @@ class PdfJobInformationsReport extends PdfAbstractTableReport {
 	private void addConfigurationReference() throws DocumentException {
 		final Anchor quartzAnchor = new Anchor("Configuration reference", PdfFonts.BLUE.getFont());
 		quartzAnchor.setName("Quartz configuration reference");
-		quartzAnchor.setReference("http://www.quartz-scheduler.org/docs/index.html");
+		quartzAnchor.setReference("http://www.quartz-scheduler.org/documentation/");
 		quartzAnchor.setFont(PdfFonts.BLUE.getFont());
 		final Paragraph quartzParagraph = new Paragraph();
 		quartzParagraph.add(quartzAnchor);
@@ -98,7 +98,7 @@ class PdfJobInformationsReport extends PdfAbstractTableReport {
 	}
 
 	private List<String> createHeaders() {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getString("JobGroup"));
 		headers.add(getString("JobName"));
 		headers.add(getString("JobClassName"));
@@ -152,7 +152,7 @@ class PdfJobInformationsReport extends PdfAbstractTableReport {
 			final Image memoryImage = Image
 					.getInstance(Bar.toBar(100d * elapsedTime / counterRequest.getMean()), null);
 			memoryImage.scalePercent(47);
-			elapsedTimePhrase.add("\n");
+			elapsedTimePhrase.add(new Chunk("\n"));
 			elapsedTimePhrase.add(new Chunk(memoryImage, 0, 0));
 			addCell(elapsedTimePhrase);
 		} else {

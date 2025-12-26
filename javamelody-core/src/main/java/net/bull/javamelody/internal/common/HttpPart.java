@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,7 +17,7 @@
  */
 package net.bull.javamelody.internal.common;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * Enumération des valeurs pour le paramètre "part" dans les requêtes http.
@@ -55,7 +55,9 @@ public enum HttpPart {
 	SPRING_BEANS("springBeans"),
 	RUM("rum"),
 	WEBAPP_VERSIONS("webappVersions"),
-	CACHE_KEYS("cacheKeys");
+	CACHE_KEYS("cacheKeys"),
+	JCACHE_KEYS("jcacheKeys"),
+	HASH_PASSWORD("hashPassword");
 
 	private final String name;
 

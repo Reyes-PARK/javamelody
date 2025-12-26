@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,24 +17,24 @@
  */
 package net.bull.javamelody;
 
-import javax.ejb.MessageDriven;
-import javax.ejb.Stateful;
-import javax.ejb.Stateless;
-import javax.faces.bean.ApplicationScoped;
-import javax.faces.bean.SessionScoped;
-import javax.interceptor.Interceptor;
+import jakarta.annotation.Priority;
+import jakarta.ejb.MessageDriven;
+import jakarta.ejb.Stateful;
+import jakarta.ejb.Stateless;
+import jakarta.interceptor.Interceptor;
 
 /**
- * Intercepteur pour CDI & pour EJB 3.1 (Java EE 6+).
+ * Intercepteur pour CDI et pour EJB 3.1 (Java EE 6+).
  * Il est destiné à un compteur pour les statistiques d'exécutions de
- * méthodes @{@link javax.faces.bean.RequestScoped}, @{@link SessionScoped}, @{@link ApplicationScoped}
+ * méthodes @RequestScoped, @SessionScoped, @ApplicationScoped
  * ( ainsi que @{@link Stateless}, @{@link Stateful} ou @{@link MessageDriven} ).
  * Il peut être paramétré par l'annotation @{@link Monitored} dans les sources java des classes d'implémentations de beans CDI ou d'ejb.
- * (ou alors par l'annotation @{@link javax.interceptor.Interceptors} dans les mêmes classes).
+ * (ou alors par l'annotation @{@link jakarta.interceptor.Interceptors} dans les mêmes classes).
  * @author Emeric Vernat
  */
 @Interceptor
 @Monitored
+@Priority(value = Interceptor.Priority.APPLICATION)
 public class MonitoringCdiInterceptor extends MonitoringInterceptor {
 	private static final long serialVersionUID = 1L;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -21,23 +21,25 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import org.apache.log4j.Logger;
-
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.internal.common.HttpParameter;
 import net.bull.javamelody.internal.common.HttpPart;
@@ -46,24 +48,16 @@ import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.model.Action;
 import net.bull.javamelody.internal.model.Collector;
 import net.bull.javamelody.internal.model.CollectorServer;
-import net.bull.javamelody.internal.model.ConnectionInformations;
 import net.bull.javamelody.internal.model.Counter;
 import net.bull.javamelody.internal.model.CounterRequest;
 import net.bull.javamelody.internal.model.CounterRequestAggregation;
-import net.bull.javamelody.internal.model.CounterRequestContext;
 import net.bull.javamelody.internal.model.DatabaseInformations;
 import net.bull.javamelody.internal.model.HsErrPid;
 import net.bull.javamelody.internal.model.JavaInformations;
-import net.bull.javamelody.internal.model.JndiBinding;
 import net.bull.javamelody.internal.model.LabradorRetriever;
-import net.bull.javamelody.internal.model.MBeanNode;
-import net.bull.javamelody.internal.model.Period;
-import net.bull.javamelody.internal.model.ProcessInformations;
 import net.bull.javamelody.internal.model.Range;
 import net.bull.javamelody.internal.model.RemoteCollector;
-import net.bull.javamelody.internal.model.SamplingProfiler.SampledMethod;
 import net.bull.javamelody.internal.model.SessionInformations;
-import net.bull.javamelody.internal.model.ThreadInformations;
 import net.bull.javamelody.internal.model.TransportFormat;
 import net.bull.javamelody.internal.web.html.HtmlAbstractReport;
 import net.bull.javamelody.internal.web.html.HtmlReport;
@@ -73,7 +67,7 @@ import net.bull.javamelody.internal.web.html.HtmlReport;
  * @author Emeric Vernat
  */
 public class CollectorController { // NOPMD
-	private static final Logger LOGGER = Logger.getLogger("javamelody");
+	private static final Logger LOGGER = LogManager.getLogger("javamelody");
 
 	private static final String COOKIE_NAME = "javamelody.application";
 
@@ -97,13 +91,25 @@ public class CollectorController { // NOPMD
 					"applications should be added or removed in the applications.properties file, because the user is not allowed to write: "
 							+ file);
 		}
-		final List<URL> urls = Parameters.parseUrl(appUrls);
+		final List<URL> urls = Parameters.parseUrls(appUrls);
 		collectorServer.addCollectorApplication(appName, urls);
+	}
+
+	public void addCollectorAggregationApplication(String aggregationApplication,
+			List<String> aggregatedApplications) throws IOException {
+		final File file = Parameters.getCollectorApplicationsFile();
+		if (file.exists() && !file.canWrite()) {
+			throw new IllegalStateException(
+					"applications should be added or removed in the applications.properties file, because the user is not allowed to write: "
+							+ file);
+		}
+		collectorServer.addCollectorAggregationApplication(aggregationApplication,
+				aggregatedApplications);
 	}
 
 	public void removeCollectorApplicationNodes(String appName, String nodeUrls)
 			throws IOException {
-		final List<URL> urls = Parameters.parseUrl(nodeUrls);
+		final List<URL> urls = Parameters.parseUrls(nodeUrls);
 		collectorServer.removeCollectorApplicationNodes(appName, urls);
 	}
 
@@ -143,11 +149,11 @@ public class CollectorController { // NOPMD
 					final SerializableController serializableController = new SerializableController(
 							collector);
 					final Range range = serializableController.getRangeForSerializable(req);
-					final List<Object> serializable = new ArrayList<Object>();
 					final List<JavaInformations> javaInformationsList = getJavaInformationsByApplication(
 							application);
-					serializable.addAll((List<?>) serializableController.createDefaultSerializable(
-							javaInformationsList, range, messageForReport));
+					final List<Object> serializable = new ArrayList<>(
+							(List<?>) serializableController.createDefaultSerializable(
+									javaInformationsList, range, messageForReport));
 					monitoringController.doCompressedSerializable(req, resp,
 							(Serializable) serializable);
 				} else {
@@ -157,11 +163,8 @@ public class CollectorController { // NOPMD
 			}
 
 			doReport(req, resp, application);
-		} catch (final RuntimeException e) {
-			// catch RuntimeException pour éviter warning exception
-			writeMessage(req, resp, application, e.getMessage());
 		} catch (final Exception e) {
-			writeMessage(req, resp, application, e.getMessage());
+			writeMessage(req, resp, application, String.valueOf(e.getMessage()));
 		}
 	}
 
@@ -190,7 +193,7 @@ public class CollectorController { // NOPMD
 	private void doCompressedPart(HttpServletRequest httpRequest, HttpServletResponse httpResponse,
 			String application, MonitoringController monitoringController)
 			throws IOException, ServletException {
-		if (MonitoringController.isCompressionSupported(httpRequest)) {
+		if (MonitoringController.isCompressionSupported(httpRequest, httpResponse)) {
 			// comme la page html peut être volumineuse
 			// on compresse le flux de réponse en gzip à partir de 4 Ko
 			// (à moins que la compression http ne soit pas supportée
@@ -237,6 +240,12 @@ public class CollectorController { // NOPMD
 			final String cacheId = HttpParameter.CACHE_ID.getParameterFrom(req);
 			doMultiHtmlProxy(req, resp, application,
 					HttpPart.CACHE_KEYS.toString() + '&' + HttpParameter.CACHE_ID + '=' + cacheId,
+					I18N.getFormattedString("Keys_cache", cacheId), null, "caches.png");
+		} else if (HttpPart.JCACHE_KEYS.isPart(req)) {
+			// note: cache keys may not be serializable, so we do not try to serialize them
+			final String cacheId = HttpParameter.CACHE_ID.getParameterFrom(req);
+			doMultiHtmlProxy(req, resp, application,
+					HttpPart.JCACHE_KEYS.toString() + '&' + HttpParameter.CACHE_ID + '=' + cacheId,
 					I18N.getFormattedString("Keys_cache", cacheId), null, "caches.png");
 		} else {
 			final List<JavaInformations> javaInformationsList = getJavaInformationsByApplication(
@@ -302,7 +311,7 @@ public class CollectorController { // NOPMD
 		htmlReport.writeHtmlHeader();
 		writer.write("<div class='noPrint'>");
 		I18N.writelnTo(
-				"<a href='javascript:history.back()'><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;",
+				"<a class='back' href=''><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;",
 				writer);
 		writer.write("<a href='?part=");
 		writer.write(partParameter);
@@ -350,11 +359,9 @@ public class CollectorController { // NOPMD
 		final SerializableController serializableController = new SerializableController(collector);
 		final Range range = serializableController.getRangeForSerializable(httpRequest);
 		if (HttpPart.THREADS.isPart(httpRequest)) {
-			return new ArrayList<List<ThreadInformations>>(
-					collectorServer.getThreadInformationsLists(application));
+			return new ArrayList<>(collectorServer.getThreadInformationsLists(application));
 		} else if (HttpPart.CURRENT_REQUESTS.isPart(httpRequest)) {
-			return new LinkedHashMap<JavaInformations, List<CounterRequestContext>>(
-					collectorServer.collectCurrentRequests(application));
+			return new LinkedHashMap<>(collectorServer.collectCurrentRequests(application));
 		} else if (HttpPart.EXPLAIN_PLAN.isPart(httpRequest)) {
 			final String sqlRequest = httpRequest.getHeader(HttpParameter.REQUEST.getName());
 			return collectorServer.collectSqlRequestExplainPlan(application, sqlRequest);
@@ -364,16 +371,16 @@ public class CollectorController { // NOPMD
 			final Counter counter = collector.getRangeCounter(range, counterName);
 			final List<CounterRequest> requestList = new CounterRequestAggregation(counter)
 					.getRequestsAggregatedOrFilteredByClassName(requestId);
-			return new ArrayList<CounterRequest>(requestList);
+			return new ArrayList<>(requestList);
 		} else if (HttpPart.APPLICATIONS.isPart(httpRequest)) {
 			// list all applications, with last exceptions if not available,
 			// use ?part=applications&format=json for example
-			final Map<String, Throwable> applications = new HashMap<String, Throwable>();
+			final Map<String, Throwable> applications = new HashMap<>();
 			for (final String app : Parameters.getCollectorUrlsByApplications().keySet()) {
 				applications.put(app, null);
 			}
 			applications.putAll(collectorServer.getLastCollectExceptionsByApplication());
-			return new HashMap<String, Throwable>(applications);
+			return new HashMap<>(applications);
 		} else if (HttpPart.JROBINS.isPart(httpRequest)
 				|| HttpPart.OTHER_JROBINS.isPart(httpRequest)) {
 			// pour UI Swing
@@ -392,7 +399,7 @@ public class CollectorController { // NOPMD
 		if (HttpPart.JVM.isPart(httpRequest)) {
 			final List<JavaInformations> javaInformationsList = getJavaInformationsByApplication(
 					application);
-			return new ArrayList<JavaInformations>(javaInformationsList);
+			return new ArrayList<>(javaInformationsList);
 		} else if (HttpPart.HEAP_HISTO.isPart(httpRequest)) {
 			// par sécurité
 			Action.checkSystemActionsEnabled();
@@ -406,27 +413,24 @@ public class CollectorController { // NOPMD
 			if (sessionId != null && !sessionInformations.isEmpty()) {
 				return sessionInformations.get(0);
 			}
-			return new ArrayList<SessionInformations>(sessionInformations);
+			return new ArrayList<>(sessionInformations);
 		} else if (HttpPart.HOTSPOTS.isPart(httpRequest)) {
 			// par sécurité
 			Action.checkSystemActionsEnabled();
-			return new ArrayList<SampledMethod>(collectorServer.collectHotspots(application));
+			return new ArrayList<>(collectorServer.collectHotspots(application));
 		} else if (HttpPart.PROCESSES.isPart(httpRequest)) {
 			// par sécurité
 			Action.checkSystemActionsEnabled();
-			return new LinkedHashMap<String, List<ProcessInformations>>(
-					collectorServer.collectProcessInformations(application));
+			return new LinkedHashMap<>(collectorServer.collectProcessInformations(application));
 		} else if (HttpPart.JNDI.isPart(httpRequest)) {
 			// par sécurité
 			Action.checkSystemActionsEnabled();
 			final String path = HttpParameter.PATH.getParameterFrom(httpRequest);
-			return new ArrayList<JndiBinding>(
-					collectorServer.collectJndiBindings(application, path));
+			return new ArrayList<>(collectorServer.collectJndiBindings(application, path));
 		} else if (HttpPart.MBEANS.isPart(httpRequest)) {
 			// par sécurité
 			Action.checkSystemActionsEnabled();
-			return new LinkedHashMap<String, List<MBeanNode>>(
-					collectorServer.collectMBeans(application));
+			return new LinkedHashMap<>(collectorServer.collectMBeans(application));
 		} else if (HttpPart.DATABASE.isPart(httpRequest)) {
 			// par sécurité
 			Action.checkSystemActionsEnabled();
@@ -436,14 +440,13 @@ public class CollectorController { // NOPMD
 		} else if (HttpPart.CONNECTIONS.isPart(httpRequest)) {
 			// par sécurité
 			Action.checkSystemActionsEnabled();
-			return new ArrayList<List<ConnectionInformations>>(
-					collectorServer.collectConnectionInformations(application));
+			return new ArrayList<>(collectorServer.collectConnectionInformations(application));
 		} else if (HttpPart.CRASHES.isPart(httpRequest)) {
 			// par sécurité
 			Action.checkSystemActionsEnabled();
 			final List<JavaInformations> javaInformationsList = getJavaInformationsByApplication(
 					application);
-			return new ArrayList<HsErrPid>(HsErrPid.getHsErrPidList(javaInformationsList));
+			return new ArrayList<>(HsErrPid.getHsErrPidList(javaInformationsList));
 		}
 		return null;
 	}
@@ -466,23 +469,19 @@ public class CollectorController { // NOPMD
 		final Collector collector = getCollectorByApplication(application);
 		final List<JavaInformations> javaInformationsList = getJavaInformationsByApplication(
 				application);
-		if (application == null || collector == null || javaInformationsList == null) {
+		if (application == null || collector == null || javaInformationsList == null
+				|| HttpParameter.PART.getParameterFrom(req) == null) {
 			showAlertAndRedirectTo(resp, message, "?");
 		} else {
-			final PrintWriter writer = createWriterFromOutputStream(resp);
 			final String partToRedirectTo;
-			if (HttpParameter.CACHE_ID.getParameterFrom(req) == null
-					|| HttpParameter.PART.getParameterFrom(req) == null) {
-				partToRedirectTo = HttpParameter.PART.getParameterFrom(req);
+			if (HttpParameter.CACHE_ID.getParameterFrom(req) == null) {
+				partToRedirectTo = I18N.urlEncode(HttpParameter.PART.getParameterFrom(req));
 			} else {
-				partToRedirectTo = HttpParameter.PART.getParameterFrom(req) + '&'
+				partToRedirectTo = I18N.urlEncode(HttpParameter.PART.getParameterFrom(req)) + '&'
 						+ HttpParameter.CACHE_ID + '='
-						+ HttpParameter.CACHE_ID.getParameterFrom(req);
+						+ I18N.urlEncode(HttpParameter.CACHE_ID.getParameterFrom(req));
 			}
-			// la période n'a pas d'importance pour writeMessageIfNotNull
-			new HtmlReport(collector, collectorServer, javaInformationsList, Period.TOUT, writer)
-					.writeMessageIfNotNull(message, partToRedirectTo);
-			writer.close();
+			showAlertAndRedirectTo(resp, message, "?part=" + partToRedirectTo);
 		}
 	}
 
@@ -492,20 +491,33 @@ public class CollectorController { // NOPMD
 		return new PrintWriter(MonitoringController.getWriter(httpResponse));
 	}
 
+	private static void writeHtmlBegin(PrintWriter writer) {
+		writer.write(
+				"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">");
+		writer.write("<html lang='" + I18N.getCurrentLocale().getLanguage() + "'><head>"
+				+ "<title>Monitoring</title>"
+				+ "<script type='text/javascript' src='?resource=prototype.js'></script>"
+				+ "<script type='text/javascript' src='?resource=monitoring.js'></script>"
+				+ "</head><body>");
+	}
+
+	private static void writeHtmlEnd(final PrintWriter writer) {
+		writer.write("</body></html>");
+	}
+
 	public static void writeOnlyAddApplication(HttpServletResponse resp) throws IOException {
 		final PrintWriter writer = createWriterFromOutputStream(resp);
-		writer.write("<html lang='" + I18N.getCurrentLocale().getLanguage()
-				+ "'><head><title>Monitoring</title></head><body>");
-		HtmlReport.writeAddAndRemoveApplicationLinks(null, writer);
-		writer.write("</body></html>");
+		writeHtmlBegin(writer);
+		final Collection<String> applications = Collections.emptyList();
+		HtmlReport.writeAddAndRemoveApplicationLinks(null, applications, writer);
+		writeHtmlEnd(writer);
 		writer.close();
 	}
 
 	public static void writeDataUnavailableForApplication(String application,
 			HttpServletResponse resp) throws IOException {
 		final PrintWriter writer = createWriterFromOutputStream(resp);
-		writer.write("<html lang='" + I18N.getCurrentLocale().getLanguage()
-				+ "'><head><title>Monitoring</title></head><body>");
+		writeHtmlBegin(writer);
 		writer.write(
 				I18N.htmlEncode(I18N.getFormattedString("data_unavailable", application), false));
 		writer.write("<br/><br/>");
@@ -518,25 +530,25 @@ public class CollectorController { // NOPMD
 					+ "' ");
 			final String messageConfirmation = I18N.getFormattedString("confirm_remove_application",
 					application);
-			writer.write("onclick=\"javascript:return confirm('"
-					+ I18N.javascriptEncode(messageConfirmation) + "');\">");
+			writer.write("class='confirm' data-confirm='"
+					+ I18N.htmlEncode(messageConfirmation, false, false) + "'>");
 			final String removeApplicationLabel = I18N.getFormattedString("remove_application",
 					application);
 			writer.write("<img src='?resource=action_delete.png' alt=\"" + removeApplicationLabel
 					+ "\"/> " + removeApplicationLabel + "</a>");
 		}
-		writer.write("</body></html>");
+		writeHtmlEnd(writer);
 		writer.close();
 	}
 
 	public static void showAlertAndRedirectTo(HttpServletResponse resp, String message,
 			String redirectTo) throws IOException {
 		final PrintWriter writer = createWriterFromOutputStream(resp);
-		writer.write("<script type='text/javascript'>alert('");
-		writer.write(I18N.javascriptEncode(message));
-		writer.write("');location.href='");
-		writer.write(redirectTo);
-		writer.write("';</script>");
+		writeHtmlBegin(writer);
+		writer.write("<span class='alertAndRedirect' data-alert='"
+				+ I18N.htmlEncode(message, false, false) + "' data-href='" + redirectTo
+				+ "'></span>");
+		writeHtmlEnd(writer);
 		writer.close();
 	}
 
@@ -546,6 +558,18 @@ public class CollectorController { // NOPMD
 
 	private String forwardActionAndUpdateData(HttpServletRequest req, String application)
 			throws IOException {
+		final List<String> aggregatedApplications = Parameters.getApplicationsByAggregationApplication().get(application);
+		if (aggregatedApplications != null) {
+			String messageForReport = "";
+			// c'est une application d'agrégation, on forward sur chaque application agrégée
+			for (final String aggregatedApplication : aggregatedApplications) {
+				final String msg = forwardActionAndUpdateData(req, aggregatedApplication);
+				if (msg != null) {
+					messageForReport = msg;
+				}
+			}
+			return messageForReport;
+		}
 		final String actionParameter = HttpParameter.ACTION.getParameterFrom(req);
 		final String sessionIdParameter = HttpParameter.SESSION_ID.getParameterFrom(req);
 		final String threadIdParameter = HttpParameter.THREAD_ID.getParameterFrom(req);
@@ -553,7 +577,7 @@ public class CollectorController { // NOPMD
 		final String cacheIdParameter = HttpParameter.CACHE_ID.getParameterFrom(req);
 		final String cacheKeyParameter = HttpParameter.CACHE_KEY.getParameterFrom(req);
 		final List<URL> urls = getUrlsByApplication(application);
-		final List<URL> actionUrls = new ArrayList<URL>(urls.size());
+		final List<URL> actionUrls = new ArrayList<>(urls.size());
 		for (final URL url : urls) {
 			final StringBuilder actionUrl = new StringBuilder(url.toString());
 			actionUrl.append("&action=").append(actionParameter);
@@ -577,8 +601,7 @@ public class CollectorController { // NOPMD
 		return collectorServer.collectForApplicationForAction(application, actionUrls);
 	}
 
-	public String getApplication(HttpServletRequest req, HttpServletResponse resp)
-			throws UnsupportedEncodingException {
+	public String getApplication(HttpServletRequest req, HttpServletResponse resp) {
 		// on utilise un cookie client pour stocker l'application
 		// car la page html est faite pour une seule application sans passer son nom en paramètre des requêtes
 		// et pour ne pas perdre l'application choisie entre les reconnexions
@@ -587,7 +610,7 @@ public class CollectorController { // NOPMD
 			// pas de paramètre application dans la requête, on cherche le cookie
 			final Cookie cookie = httpCookieManager.getCookieByName(req, COOKIE_NAME);
 			if (cookie != null) {
-				application = URLDecoder.decode(cookie.getValue(), "UTF-8");
+				application = URLDecoder.decode(cookie.getValue(), StandardCharsets.UTF_8);
 				if (!collectorServer.isApplicationDataAvailable(application)) {
 					cookie.setMaxAge(-1);
 					resp.addCookie(cookie);
@@ -604,7 +627,7 @@ public class CollectorController { // NOPMD
 			// En Tomcat, le cookie doit être conforme à la RFC 6265 (pas d'espace, ...)
 			// see org.apache.tomcat.util.http.Rfc6265CookieProcessor
 			httpCookieManager.addCookie(req, resp, COOKIE_NAME,
-					URLEncoder.encode(String.valueOf(application), "UTF-8"));
+					URLEncoder.encode(application, StandardCharsets.UTF_8));
 		}
 		return application;
 	}
@@ -617,7 +640,7 @@ public class CollectorController { // NOPMD
 		return collectorServer.getJavaInformationsByApplication(application);
 	}
 
-	private static List<URL> getUrlsByApplication(String application) throws IOException {
-		return CollectorServer.getUrlsByApplication(application);
+	private List<URL> getUrlsByApplication(String application) {
+		return collectorServer.getUrlsByApplication(application);
 	}
 }

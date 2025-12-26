@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -25,18 +25,19 @@ import static org.junit.Assert.assertNotNull;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-
-import javax.servlet.ServletConfig;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import java.util.Collections;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletConfig;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.web.FilterServletOutputStream;
 
@@ -151,48 +152,78 @@ public class TestCollectorServlet {
 	 * @throws IOException e */
 	@Test
 	public void testDoPost() throws ServletException, IOException {
-		doPost(null, null, false);
-		doPost(null, null, true);
-		doPost(TEST, null, true);
-		doPost(TEST, "http://localhost:8090/test", true);
-		doPost(TEST, "https://localhost:8090/test", true);
-		doPost(TEST, "ftp://localhost:8090/test", true);
-		doPost(TEST, "http://une url,pas une url", true);
+		final List<String> nullUrl = Collections.singletonList(null);
+		doPost(null, nullUrl, false);
+		doPost(null, nullUrl, true);
+		doPost(TEST, nullUrl, true);
+		doPost(TEST, List.of("http://localhost:8090/test", "http://localhost:8090/test"), true);
+		doPost(TEST, List.of("https://localhost:8090/test", "http://localhost:8090/test"), true);
+		doPost(TEST, List.of("ftp://localhost:8090/test"), true);
+		doPost(TEST, List.of("http://une url,pas une url"), true);
 	}
 
-	private void doPost(String appName, String appUrls, boolean allowed)
+	private void doPost(String appName, List<String> appUrlsList, boolean allowed)
 			throws IOException, ServletException {
 		setUp();
-		final HttpServletRequest request = createNiceMock(HttpServletRequest.class);
-		expect(request.getRequestURI()).andReturn("/test/request").anyTimes();
-		// un cookie d'une application (qui n'existe pas)
-		final Cookie[] cookies = { new Cookie("javamelody.application", "anothertest") };
-		expect(request.getCookies()).andReturn(cookies).anyTimes();
-		final HttpServletResponse response = createNiceMock(HttpServletResponse.class);
-		final FilterServletOutputStream servletOutputStream = new FilterServletOutputStream(
-				new ByteArrayOutputStream());
-		expect(response.getOutputStream()).andReturn(servletOutputStream).anyTimes();
 		if (appName != null) {
 			Parameters.removeCollectorApplication(appName);
 		}
-		expect(request.getParameter("appName")).andReturn(appName).anyTimes();
-		expect(request.getParameter("appUrls")).andReturn(appUrls).anyTimes();
 		if (!allowed) {
 			expect(context.getInitParameter(
 					Parameters.PARAMETER_SYSTEM_PREFIX + Parameter.ALLOWED_ADDR_PATTERN.getCode()))
 							.andReturn("none").anyTimes();
-			expect(request.getRemoteAddr()).andReturn(REMOTE_ADDR).anyTimes();
 		}
 		replay(config);
 		replay(context);
-		replay(request);
-		replay(response);
 		collectorServlet.init(config);
-		collectorServlet.doPost(request, response);
 		verify(config);
 		verify(context);
-		verify(request);
-		verify(response);
+
+		for (final String appUrls : appUrlsList) {
+			final HttpServletRequest request = createNiceMock(HttpServletRequest.class);
+			expect(request.getRequestURI()).andReturn("/test/request").anyTimes();
+			// un cookie d'une application (qui n'existe pas)
+			final Cookie[] cookies = { new Cookie("javamelody.application", "anothertest") };
+			expect(request.getCookies()).andReturn(cookies).anyTimes();
+			final HttpServletResponse response = createNiceMock(HttpServletResponse.class);
+			final FilterServletOutputStream servletOutputStream = new FilterServletOutputStream(
+					new ByteArrayOutputStream());
+			expect(response.getOutputStream()).andReturn(servletOutputStream).anyTimes();
+			expect(request.getParameter("appName")).andReturn(appName).anyTimes();
+			if (!allowed) {
+				expect(request.getRemoteAddr()).andReturn(REMOTE_ADDR).anyTimes();
+			}
+			expect(request.getParameter("appUrls")).andReturn(appUrls).anyTimes();
+			replay(request);
+			replay(response);
+			collectorServlet.doPost(request, response);
+			verify(request);
+			verify(response);
+		}
+
+		for (final String appUrls : appUrlsList) {
+			final HttpServletRequest request = createNiceMock(HttpServletRequest.class);
+			expect(request.getParameter("action")).andReturn("unregisterNode").anyTimes();
+
+			expect(request.getRequestURI()).andReturn("/test/request").anyTimes();
+			// un cookie d'une application (qui n'existe pas)
+			final Cookie[] cookies = { new Cookie("javamelody.application", "anothertest") };
+			expect(request.getCookies()).andReturn(cookies).anyTimes();
+			final HttpServletResponse response = createNiceMock(HttpServletResponse.class);
+			final FilterServletOutputStream servletOutputStream = new FilterServletOutputStream(
+					new ByteArrayOutputStream());
+			expect(response.getOutputStream()).andReturn(servletOutputStream).anyTimes();
+			expect(request.getParameter("appName")).andReturn(appName).anyTimes();
+			if (!allowed) {
+				expect(request.getRemoteAddr()).andReturn(REMOTE_ADDR).anyTimes();
+			}
+			expect(request.getParameter("appUrls")).andReturn(appUrls).anyTimes();
+			replay(request);
+			replay(response);
+			collectorServlet.doPost(request, response);
+			verify(request);
+			verify(response);
+		}
 	}
 
 	/** Test. */
@@ -204,5 +235,11 @@ public class TestCollectorServlet {
 			// cela s'arrête sur le jar winstone qui n'est pas disponible en tests unitaires
 			assertNotNull("ok", e);
 		}
+	}
+
+	@Test
+	public void testAddCollectorApplication() throws IOException {
+		CollectorServlet.addCollectorApplication("test", "http://localhost:8090/test");
+		CollectorServlet.removeCollectorApplication("test");
 	}
 }

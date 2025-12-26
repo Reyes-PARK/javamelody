@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -32,7 +32,7 @@ final class XStreamAlias {
 	}
 
 	static Map<String, Class<?>> getMap() {
-		final Map<String, Class<?>> result = new HashMap<String, Class<?>>();
+		final Map<String, Class<?>> result = new HashMap<>();
 		result.put("counter", Counter.class);
 		result.put("request", CounterRequest.class);
 		result.put("requestContext", CounterRequestContext.class);
@@ -44,7 +44,7 @@ final class XStreamAlias {
 		result.put("connectionInformations", ConnectionInformations.class);
 		result.put("classInfo", HeapHistogram.ClassInfo.class);
 		result.put("sessionInformations", SessionInformations.class);
-		result.put("attribute", SessionInformations.SessionAttribute.class);
+		result.put("sessionAttribute", SessionInformations.SessionAttribute.class);
 		result.put("cacheInformations", CacheInformations.class);
 		result.put("jobInformations", JobInformations.class);
 		result.put("counterError", CounterError.class);

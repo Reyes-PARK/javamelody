@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -25,7 +25,7 @@ import org.springframework.aop.Pointcut;
 
 /**
  * Pointcut that identifies methods/classes with the {@link MonitoredWithSpring} annotation.
- *
+ * <p>
  * Inspired by Erik van Oosten (Java Simon, Licence LGPL)
  * @author Emeric Vernat
  */

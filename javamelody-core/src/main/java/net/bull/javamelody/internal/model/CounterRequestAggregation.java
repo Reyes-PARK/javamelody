@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 
 import net.bull.javamelody.Parameter;
-import net.bull.javamelody.internal.model.Counter.CounterRequestComparator;
 
 /**
  * Agrégation des requêtes d'un compteur pour l'affichage d'une synthèse.
@@ -64,7 +63,7 @@ public class CounterRequestAggregation {
 
 		// on n'affiche pas la colonne "Taille de réponse" si elle est négative car non défini
 		// (pour les requêtes sql par exemple)
-		this.responseSizeDisplayed = globalRequest.getResponseSizeMean() >= 0;
+		this.responseSizeDisplayed = globalRequest.getResponseSizeMean() >= 0L;
 		this.childHitsDisplayed = globalRequest.hasChildHits();
 		this.timesDisplayed = globalRequest.getMean() >= 0;
 		this.cpuTimesDisplayed = globalRequest.getCpuTimeMean() >= 0;
@@ -163,7 +162,7 @@ public class CounterRequestAggregation {
 			// on a un paramètre requestId, ie que l'utilisateur a cliqué sur un lien de détail
 			// des requêtes pour une classe, et on va afficher la liste des requêtes non aggrégées
 			// mais filtrées pour cette classe
-			requestList = new ArrayList<CounterRequest>();
+			requestList = new ArrayList<>();
 			// on recherche d'abord le nom de la classe à partir de requestId
 			for (final CounterRequest requestAggregated : requestsAggregatedByClassName) {
 				if (requestId.equals(requestAggregated.getId())) {
@@ -179,7 +178,7 @@ public class CounterRequestAggregation {
 
 	private List<CounterRequest> getRequestsAggregatedByClassName() {
 		assert counter.isBusinessFacadeCounter();
-		final Map<String, CounterRequest> requestMap = new HashMap<String, CounterRequest>();
+		final Map<String, CounterRequest> requestMap = new HashMap<>();
 		final String counterName = counter.getName();
 		for (final CounterRequest request : getRequests()) {
 			final String className = getClassNameFromRequest(request);
@@ -191,9 +190,9 @@ public class CounterRequestAggregation {
 			global.addHits(request);
 		}
 		// on trie par la somme des durées
-		final List<CounterRequest> requestList = new ArrayList<CounterRequest>(requestMap.values());
+		final List<CounterRequest> requestList = new ArrayList<>(requestMap.values());
 		if (requestList.size() > 1) {
-			Collections.sort(requestList, Collections.reverseOrder(new CounterRequestComparator()));
+			requestList.sort(Counter.COUNTER_REQUEST_COMPARATOR);
 		}
 		return requestList;
 	}
@@ -201,7 +200,7 @@ public class CounterRequestAggregation {
 	private List<CounterRequest> getRequestsFilteredByClassName(String className) {
 		assert counter.isBusinessFacadeCounter();
 		assert className != null;
-		final List<CounterRequest> requestList = new ArrayList<CounterRequest>();
+		final List<CounterRequest> requestList = new ArrayList<>();
 		for (final CounterRequest request : getRequests()) {
 			final String requestClassName = getClassNameFromRequest(request);
 			if (className.equals(requestClassName)) {
@@ -209,7 +208,7 @@ public class CounterRequestAggregation {
 			}
 		}
 		if (requestList.size() > 1) {
-			Collections.sort(requestList, Collections.reverseOrder(new CounterRequestComparator()));
+			requestList.sort(Counter.COUNTER_REQUEST_COMPARATOR);
 		}
 		return requestList;
 	}

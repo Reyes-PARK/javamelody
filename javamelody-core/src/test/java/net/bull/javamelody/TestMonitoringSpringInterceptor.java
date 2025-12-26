@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,6 +17,7 @@
  */
 package net.bull.javamelody;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -29,6 +30,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
+import org.springframework.core.Ordered;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Controller;
@@ -52,9 +54,8 @@ public class TestMonitoringSpringInterceptor {
 	@Before
 	public void setUp() {
 		Utils.initialize();
-		this.context = new ClassPathXmlApplicationContext(
-				new String[] { MONITORING_CONTEXT_FILENAME, MONITORING_CONTEXT_FILENAME2,
-						TEST_CONTEXT_FILENAME, });
+		this.context = new ClassPathXmlApplicationContext(MONITORING_CONTEXT_FILENAME,
+				MONITORING_CONTEXT_FILENAME2, TEST_CONTEXT_FILENAME);
 	}
 
 	@After
@@ -331,12 +332,6 @@ public class TestMonitoringSpringInterceptor {
 		assertNotNull("classFilter", pointcut.getClassFilter());
 		assertNotNull("methodMatcher", pointcut.getMethodMatcher());
 		assertFalse("methodMatcher.isRuntime", pointcut.getMethodMatcher().isRuntime());
-		try {
-			assertFalse("methodMatcher.matches",
-					pointcut.getMethodMatcher().matches(null, null, (Object[]) null));
-		} catch (final UnsupportedOperationException e) {
-			assertNotNull("ok", e);
-		}
 	}
 
 	/** Test.
@@ -423,6 +418,13 @@ public class TestMonitoringSpringInterceptor {
 		// utilisation de l'InvocationHandler dans SpringDataSourceBeanPostProcessor
 		context.getType("dataSource2");
 		context.getBean("dataSource2");
+
+		final SpringDataSourceBeanPostProcessor springDataSourceBeanPostProcessor = (SpringDataSourceBeanPostProcessor) context
+				.getBean("springDataSourceBeanPostProcessor");
+		assertEquals("getOrder", Ordered.LOWEST_PRECEDENCE,
+				springDataSourceBeanPostProcessor.getOrder());
+		springDataSourceBeanPostProcessor.setOrder(1);
+		assertEquals("getOrder", 1, springDataSourceBeanPostProcessor.getOrder());
 
 		Utils.setProperty(Parameter.NO_DATABASE, "true");
 		assertNotNull("no database context", context);

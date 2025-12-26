@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -29,14 +29,13 @@ import static org.junit.Assert.fail;
 
 import java.lang.reflect.Field;
 
-import javax.servlet.ServletContext;
-import javax.servlet.ServletContextEvent;
-import javax.servlet.http.HttpSession;
-import javax.servlet.http.HttpSessionEvent;
-
 import org.junit.Before;
 import org.junit.Test;
 
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletContextEvent;
+import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpSessionEvent;
 import net.bull.javamelody.internal.model.SessionInformations;
 
 /**
@@ -59,7 +58,11 @@ public class TestSessionListener {
 	}
 
 	private void clearSessions() {
-		sessionListener.contextDestroyed(null);
+		final ServletContext servletContext = createNiceMock(ServletContext.class);
+		final ServletContextEvent servletContextEvent = new ServletContextEvent(servletContext);
+		replay(servletContext);
+		sessionListener.contextDestroyed(servletContextEvent);
+		verify(servletContext);
 	}
 
 	/** Test. */
@@ -70,9 +73,7 @@ public class TestSessionListener {
 			final Field field = SessionListener.class.getDeclaredField("instanceCreated");
 			field.setAccessible(true);
 			field.set(null, false);
-		} catch (final IllegalAccessException e) {
-			throw new IllegalStateException(e);
-		} catch (final NoSuchFieldException e) {
+		} catch (final IllegalAccessException | NoSuchFieldException e) {
 			throw new IllegalStateException(e);
 		}
 		sessionListener = new SessionListener();
@@ -151,8 +152,8 @@ public class TestSessionListener {
 	public void testContextInitialized() {
 		ServletContext servletContext = createNiceMock(ServletContext.class);
 		expect(servletContext.getServerInfo()).andReturn("Mock").anyTimes();
-		expect(servletContext.getMajorVersion()).andReturn(2).anyTimes();
-		expect(servletContext.getMinorVersion()).andReturn(5).anyTimes();
+		expect(servletContext.getMajorVersion()).andReturn(5).anyTimes();
+		expect(servletContext.getMinorVersion()).andReturn(0).anyTimes();
 		ServletContextEvent servletContextEvent = new ServletContextEvent(servletContext);
 		replay(servletContext);
 		sessionListener.contextInitialized(servletContextEvent);
@@ -162,8 +163,8 @@ public class TestSessionListener {
 		Utils.setProperty(Parameter.NO_DATABASE, "true");
 		servletContext = createNiceMock(ServletContext.class);
 		expect(servletContext.getServerInfo()).andReturn("Mock").anyTimes();
-		expect(servletContext.getMajorVersion()).andReturn(2).anyTimes();
-		expect(servletContext.getMinorVersion()).andReturn(5).anyTimes();
+		expect(servletContext.getMajorVersion()).andReturn(5).anyTimes();
+		expect(servletContext.getMinorVersion()).andReturn(0).anyTimes();
 		servletContextEvent = new ServletContextEvent(servletContext);
 		replay(servletContext);
 		sessionListener.contextInitialized(servletContextEvent);
@@ -174,8 +175,12 @@ public class TestSessionListener {
 	/** Test. */
 	@Test
 	public void testContextDestroyed() {
+		final ServletContext servletContext = createNiceMock(ServletContext.class);
+		final ServletContextEvent servletContextEvent = new ServletContextEvent(servletContext);
+		replay(servletContext);
 		sessionListener.sessionCreated(createSessionEvent());
-		sessionListener.contextDestroyed(null);
+		sessionListener.contextDestroyed(servletContextEvent);
+		verify(servletContext);
 		if (!SessionListener.getAllSessionsInformations().isEmpty()) {
 			fail("contextDestroyed");
 		}
@@ -248,8 +253,8 @@ public class TestSessionListener {
 		final ServletContextEvent servletContextEvent = new ServletContextEvent(servletContext);
 		expect(servletContext.getContextPath()).andReturn("/test").anyTimes();
 		expect(servletContext.getServerInfo()).andReturn("Glassfish").anyTimes();
-		expect(servletContext.getMajorVersion()).andReturn(2).anyTimes();
-		expect(servletContext.getMinorVersion()).andReturn(5).anyTimes();
+		expect(servletContext.getMajorVersion()).andReturn(5).anyTimes();
+		expect(servletContext.getMinorVersion()).andReturn(0).anyTimes();
 		replay(servletContext);
 		sessionListener1.contextInitialized(servletContextEvent);
 		sessionListener2.contextInitialized(servletContextEvent);

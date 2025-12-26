@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -78,9 +78,7 @@ class StorageLock {
 					fileChannel = input.getChannel();
 				}
 				fileLock = fileChannel.tryLock();
-			} catch (final IOException e) {
-				return null;
-			} catch (final OverlappingFileLockException e) {
+			} catch (final IOException | OverlappingFileLockException e) {
 				return null;
 			}
 		}

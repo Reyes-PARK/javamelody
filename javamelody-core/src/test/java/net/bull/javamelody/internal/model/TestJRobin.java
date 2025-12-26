@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -112,14 +112,11 @@ public class TestJRobin {
 		JRobin.createInstance(application, jrobinName, "request");
 
 		assertTrue("delete", !rrdFile.exists() || rrdFile.delete());
-		final FileOutputStream out = new FileOutputStream(rrdFile);
-		try {
+		try (FileOutputStream out = new FileOutputStream(rrdFile)) {
 			// il faut un minimum de quantité de données pour avoir RrdException "Invalid file header"
 			for (int i = 0; i < 100; i++) {
 				out.write("n'est pas un fichier rrd".getBytes());
 			}
-		} finally {
-			out.close();
 		}
 		final JRobin jrobin = JRobin.createInstance(application, jrobinName, "request");
 		// addValue devrait appeler resetFile car RrdException "Invalid file header"
@@ -134,10 +131,9 @@ public class TestJRobin {
 		jrobin.addValue(1);
 	}
 
-	/** Test.
-	 * @throws IOException e */
+	/** Test. */
 	@Test
-	public void testDeleteObsoleteJRobinFiles() throws IOException {
+	public void testDeleteObsoleteJRobinFiles() {
 		JRobin.deleteObsoleteJRobinFiles(TEST_APPLICATION);
 		Utils.setProperty(Parameter.OBSOLETE_GRAPHS_DAYS, "1");
 		JRobin.deleteObsoleteJRobinFiles(TEST_APPLICATION);

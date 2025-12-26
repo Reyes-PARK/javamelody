@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -24,11 +24,11 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.CodeSource;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import net.bull.javamelody.internal.common.HttpPart;
@@ -40,6 +40,9 @@ import net.bull.javamelody.internal.model.MavenArtifact;
  */
 class HtmlSourceReport extends HtmlAbstractReport {
 	private static final File JDK_SRC_FILE = getJdkSrcFile();
+	private static final List<String> TOMCAT_PACKAGES = List.of("org.apache.tomcat",
+			"org.apache.catalina", "org.apache.coyote", "org.apache.jasper", "org.apache.el",
+			"org.apache.juli", "org.apache.naming");
 
 	private final String source;
 
@@ -50,12 +53,13 @@ class HtmlSourceReport extends HtmlAbstractReport {
 
 	private static String normalizeClassName(String className) {
 		String temp = className;
-		if (temp.lastIndexOf('$') != -1) {
+		while (temp.lastIndexOf('$') != -1) {
+			// className may be like org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration$$EnhancerBySpringCGLIB$$e0b05818
 			temp = temp.substring(0, temp.lastIndexOf('$'));
 		}
 		if (temp.lastIndexOf('/') != -1) {
 			// for JDK 9+
-			temp = temp.substring(temp.lastIndexOf('/') + 1, temp.length());
+			temp = temp.substring(temp.lastIndexOf('/') + 1);
 		}
 		return temp;
 	}
@@ -69,15 +73,30 @@ class HtmlSourceReport extends HtmlAbstractReport {
 		}
 
 		final CodeSource codeSource = clazz.getProtectionDomain().getCodeSource();
+		final String sourceFilePath = clazz.getName().replace('.', '/') + ".java";
 		if (clazz.getName().startsWith("java.")
 				|| clazz.getName().startsWith("javax.") && codeSource == null) {
 			if (JDK_SRC_FILE != null) {
-				return getSourceFromJar(clazz, JDK_SRC_FILE);
+				return getSourceFromZip(sourceFilePath, JDK_SRC_FILE);
 			}
 		} else if (codeSource != null) {
 			final File sourceJarFile = MavenArtifact.getSourceJarFile(codeSource.getLocation());
 			if (sourceJarFile != null) {
-				return getSourceFromJar(clazz, sourceJarFile);
+				return getSourceFromZip(sourceFilePath, sourceJarFile);
+			}
+		}
+		if (clazz.getName().startsWith("org.apache.")) {
+			for (final String tomcatPackage : TOMCAT_PACKAGES) {
+				if (clazz.getName().startsWith(tomcatPackage + '.')) {
+					final File tomcatSrcFile = MavenArtifact.getTomcatSrcZipFile();
+					if (tomcatSrcFile != null) {
+						assert tomcatSrcFile.getName().endsWith(".zip");
+						final String entryName = tomcatSrcFile.getName().substring(0,
+								tomcatSrcFile.getName().length() - ".zip".length()) + "/java/"
+								+ sourceFilePath;
+						return getSourceFromZip(entryName, tomcatSrcFile);
+					}
+				}
 			}
 		}
 		return null;
@@ -100,11 +119,8 @@ class HtmlSourceReport extends HtmlAbstractReport {
 		return null;
 	}
 
-	private String getSourceFromJar(Class<?> clazz, File srcJarFile)
-			throws ZipException, IOException {
-		final ZipFile zipFile = new ZipFile(srcJarFile);
-		try {
-			final String entryName = clazz.getName().replace('.', '/') + ".java";
+	private String getSourceFromZip(String entryName, File srcJarFile) throws IOException {
+		try (ZipFile zipFile = new ZipFile(srcJarFile)) {
 			ZipEntry entry = zipFile.getEntry(entryName);
 			if (entry == null) {
 				// for JDK 9 + and maybe some others
@@ -120,25 +136,17 @@ class HtmlSourceReport extends HtmlAbstractReport {
 				}
 			}
 			final StringWriter writer = new StringWriter();
-			final InputStream inputStream = zipFile.getInputStream(entry);
-			try {
-				final Reader reader = new InputStreamReader(inputStream, Charset.forName("UTF-8"));
-				try {
+			try (InputStream inputStream = zipFile.getInputStream(entry)) {
+				try (Reader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
 					final char[] chars = new char[1024];
 					int read = reader.read(chars);
 					while (read != -1) {
 						writer.write(chars, 0, read);
 						read = reader.read(chars);
 					}
-				} finally {
-					reader.close();
 				}
-			} finally {
-				inputStream.close();
 			}
 			return writer.toString();
-		} finally {
-			zipFile.close();
 		}
 	}
 
@@ -172,6 +180,11 @@ class HtmlSourceReport extends HtmlAbstractReport {
 			}
 		}
 		return htmlEncodeButNotSpace(element);
+	}
+
+	static String htmlEncodeStackTraceElementAndTabs(String element) {
+		return htmlEncodeStackTraceElement(element).replace("\t",
+				"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 	}
 
 	static String addLinkToClassName(String className) {

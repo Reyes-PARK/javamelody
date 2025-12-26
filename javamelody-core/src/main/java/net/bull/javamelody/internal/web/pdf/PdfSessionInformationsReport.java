@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -54,7 +54,7 @@ class PdfSessionInformationsReport extends PdfAbstractTableReport {
 	private final DateFormat expiryFormat = I18N.createDateAndTimeFormat();
 	private final Font cellFont = PdfFonts.TABLE_CELL.getFont();
 	private final Font severeCellFont = PdfFonts.SEVERE_CELL.getFont();
-	private final Map<String, Image> imagesByFileName = new HashMap<String, Image>();
+	private final Map<String, Image> imagesByFileName = new HashMap<>();
 
 	PdfSessionInformationsReport(List<SessionInformations> sessionsInformations,
 			Document document) {
@@ -101,8 +101,8 @@ class PdfSessionInformationsReport extends PdfAbstractTableReport {
 			meanSerializedSize = -1;
 		}
 		final Paragraph paragraph = new Paragraph("", cellFont);
-		paragraph.add(getFormattedString("nb_sessions", sessionsInformations.size()) + "\n\n"
-				+ getFormattedString("taille_moyenne_sessions", meanSerializedSize));
+		paragraph.add(new Chunk(getFormattedString("nb_sessions", sessionsInformations.size())
+				+ "\n\n" + getFormattedString("taille_moyenne_sessions", meanSerializedSize)));
 		paragraph.setAlignment(Element.ALIGN_RIGHT);
 		addToDocument(paragraph);
 	}
@@ -117,7 +117,7 @@ class PdfSessionInformationsReport extends PdfAbstractTableReport {
 	}
 
 	private List<String> createHeaders() {
-		final List<String> headers = new ArrayList<String>();
+		final List<String> headers = new ArrayList<>();
 		headers.add(getString("Session_id"));
 		headers.add(getString("Dernier_acces"));
 		headers.add(getString("Age"));

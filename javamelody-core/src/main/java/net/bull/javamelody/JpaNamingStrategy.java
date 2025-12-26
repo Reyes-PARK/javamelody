@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -19,16 +19,17 @@ package net.bull.javamelody;
 
 import java.lang.reflect.Method;
 
-import javax.persistence.EntityManager;
-import javax.persistence.Query;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 
 /**
  * JPA naming strategy.
+ *
  * @author Christoph Linder
  * @author Emeric Vernat
  */
 class JpaNamingStrategy {
-	private static final Class<?> HIBERNATE_QUERY_CLASS = getClass("org.hibernate.Query");
+	private static final Class<?> HIBERNATE_QUERY_CLASS = getClass("org.hibernate.query.Query");
 
 	private static final Class<?> ECLIPSELINK_QUERY_CLASS = getClass(
 			"org.eclipse.persistence.jpa.JpaQuery");
@@ -83,12 +84,10 @@ class JpaNamingStrategy {
 
 		// with help from Christoph Linder
 		// and https://antoniogoncalves.org/2012/05/24/how-to-get-the-jpqlsql-string-from-a-criteriaquery-in-jpa/
-		if (HIBERNATE_QUERY_CLASS != null && query.getClass().getName().startsWith("org.hibernate.")
-				&& requestName.lastIndexOf("@") != -1) {
+		if (isHibernateQuery(query) && requestName.lastIndexOf("@") != -1) {
 			// in order to have only one request name instead of patterns like
 			// Query(org.hibernate.jpa.criteria.CriteriaQueryImpl@3b0cc2dc)
-			final Object unwrappedQuery = query.unwrap(HIBERNATE_QUERY_CLASS);
-			return unwrappedQuery.toString();
+			return getHibernateQueryRequestName(query);
 		} else if (ECLIPSELINK_QUERY_CLASS != null
 				&& query.getClass().getName().startsWith("org.eclipse.")
 				&& requestName.lastIndexOf("@") != -1) {
@@ -101,16 +100,27 @@ class JpaNamingStrategy {
 		return requestName.toString();
 	}
 
+	private boolean isHibernateQuery(Query query) {
+		return HIBERNATE_QUERY_CLASS != null
+				&& query.getClass().getName().startsWith("org.hibernate.");
+	}
+
+	private String getHibernateQueryRequestName(Query query) {
+		if (HIBERNATE_QUERY_CLASS != null) {
+			final org.hibernate.query.Query<?> unwrappedQuery = (org.hibernate.query.Query<?>) query
+					.unwrap(HIBERNATE_QUERY_CLASS);
+			return unwrappedQuery.getQueryString();
+		}
+		final Object unwrappedQuery = query.unwrap(HIBERNATE_QUERY_CLASS);
+		return unwrappedQuery.toString();
+	}
+
 	protected String getMethodWithClassArgRequestName(Method javaMethod, Object[] args) {
-		final String requestName = javaMethod.getName() + '(' + ((Class<?>) args[0]).getSimpleName()
-				+ ')';
-		return requestName;
+		return javaMethod.getName() + '(' + ((Class<?>) args[0]).getSimpleName() + ')';
 	}
 
 	protected String getMethodWithEntityArgRequestName(Method javaMethod, Object[] args) {
-		final String requestName = javaMethod.getName() + '(' + args[0].getClass().getSimpleName()
-				+ ')';
-		return requestName;
+		return javaMethod.getName() + '(' + args[0].getClass().getSimpleName() + ')';
 	}
 
 	protected String getNoArgsRequestName(Method javaMethod) {

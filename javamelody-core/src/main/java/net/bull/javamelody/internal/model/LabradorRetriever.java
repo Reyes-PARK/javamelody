@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -25,15 +25,14 @@ import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.internal.common.HttpParameter;
 import net.bull.javamelody.internal.common.HttpPart;
 import net.bull.javamelody.internal.common.I18N;
@@ -135,7 +134,7 @@ public class LabradorRetriever {
 	<T> T call() throws IOException {
 		if (shouldMock()) {
 			// ce générique doit être conservé pour la compilation javac en intégration continue
-			return this.<T> createMockResultOfCall();
+			return this.createMockResultOfCall();
 		}
 		final long start = System.currentTimeMillis();
 		int dataLength = -1;
@@ -273,7 +272,7 @@ public class LabradorRetriever {
 		final int status = connection.getResponseCode();
 		if (status >= HttpURLConnection.HTTP_BAD_REQUEST) {
 			final String error = InputOutput.pumpToString(connection.getErrorStream(),
-					Charset.forName("UTF-8"));
+					StandardCharsets.UTF_8);
 			final String msg = "Error connecting to " + url + '(' + status + "): " + error;
 			throw new IOException(msg);
 		}
@@ -413,11 +412,8 @@ public class LabradorRetriever {
 					throw new IllegalStateException(e);
 				}
 			} else if (request.contains(HttpPart.HEAP_HISTO.getName())) {
-				final InputStream input = LabradorMock.class.getResourceAsStream("/heaphisto.txt");
-				try {
+				try (InputStream input = LabradorMock.class.getResourceAsStream("/heaphisto.txt")) {
 					result = new HeapHistogram(input, false);
-				} finally {
-					input.close();
 				}
 			} else if (request.contains(HttpPart.LAST_VALUE.getName())) {
 				result = -1d;

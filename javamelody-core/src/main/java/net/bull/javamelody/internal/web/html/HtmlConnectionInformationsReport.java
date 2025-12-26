@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -20,7 +20,6 @@ package net.bull.javamelody.internal.web.html;
 import java.io.IOException;
 import java.io.Writer;
 import java.text.DateFormat;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +45,7 @@ class HtmlConnectionInformationsReport extends HtmlAbstractReport {
 		// rq: cette partie du rapport n'est pas exécutée sur le serveur de collecte
 		// donc les threads sont ok
 		this.stackTracesByThread = Thread.getAllStackTraces();
-		this.threadsById = new HashMap<Long, Thread>(stackTracesByThread.size());
+		this.threadsById = new HashMap<>(stackTracesByThread.size());
 		for (final Thread thread : stackTracesByThread.keySet()) {
 			this.threadsById.put(thread.getId(), thread);
 		}
@@ -92,8 +91,7 @@ class HtmlConnectionInformationsReport extends HtmlAbstractReport {
 
 	private void writeBackAndRefreshLinks() throws IOException {
 		writeln("<div class='noPrint'>");
-		writeln("<a href='javascript:history.back()'>");
-		writeln("<img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
+		writeln("<a class='back' href=''><img src='?resource=action_back.png' alt='#Retour#'/> #Retour#</a>");
 		writeln("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 		writeln("<a href='?part=connections'>");
 		writeln("<img src='?resource=action_refresh.png' alt='#Actualiser#'/> #Actualiser#</a>");
@@ -111,7 +109,7 @@ class HtmlConnectionInformationsReport extends HtmlAbstractReport {
 		} else {
 			final StackTraceElement[] stackTrace = stackTracesByThread.get(thread);
 			writeTextWithStackTrace(thread.getName(),
-					stackTrace != null ? Arrays.asList(stackTrace) : null);
+					stackTrace != null ? List.of(stackTrace) : null);
 		}
 		write("</td>");
 	}

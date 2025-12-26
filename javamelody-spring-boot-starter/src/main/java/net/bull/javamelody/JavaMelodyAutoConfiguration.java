@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -20,41 +20,49 @@ package net.bull.javamelody;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.EventListener;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import javax.servlet.DispatcherType;
-import javax.servlet.FilterRegistration;
-import javax.servlet.ServletContext;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import javax.sql.DataSource;
 
 import org.aopalliance.intercept.MethodInvocation;
+import org.springframework.aop.Pointcut;
 import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.aop.support.Pointcuts;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.quartz.SchedulerFactoryBeanCustomizer;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Role;
+import org.springframework.core.annotation.MergedAnnotation;
+import org.springframework.core.annotation.MergedAnnotations;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.annotation.Schedules;
+import org.springframework.scheduling.quartz.SchedulerFactoryBean;
 import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.client.RestTemplate;
+
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.FilterRegistration;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Spring Boot auto-configuration for JavaMelody.
@@ -79,13 +87,24 @@ import org.springframework.web.client.RestTemplate;
  */
 @Configuration
 @EnableConfigurationProperties(JavaMelodyConfigurationProperties.class)
-@ConditionalOnWebApplication
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "enabled", matchIfMissing = true)
+@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 public class JavaMelodyAutoConfiguration {
 	/**
 	 * Name of the FilterRegistrationBean.
 	 */
 	public static final String REGISTRATION_BEAN_NAME = "javamelody-registration";
+
+	private final MonitoredWithAnnotationPointcut monitoredWithSpringAnnotationPointcut = new MonitoredWithAnnotationPointcut();
+
+	private final Pointcut asyncAnnotationPointcut = Pointcuts.union(
+			new AnnotationMatchingPointcut(Async.class),
+			new AnnotationMatchingPointcut(null, Async.class));
+
+	private final Pointcut scheduledAnnotationPointcut = Pointcuts.union(
+			new AnnotationMatchingPointcut(null, Scheduled.class),
+			new AnnotationMatchingPointcut(null, Schedules.class));
 
 	/**
 	 * Registers the JavaMelody {@link SessionListener}.
@@ -196,9 +215,9 @@ public class JavaMelodyAutoConfiguration {
 		// IMPORTANT: We cannot inject JavaMelodyConfigurationProperties here because of bean load order! Therefore we have
 		// to use that rather dirty way to inject the configuration value.
 		final SpringDataSourceBeanPostProcessor processor = new SpringDataSourceBeanPostProcessor();
-		if (excludedDatasources != null && excludedDatasources.trim().length() > 0) {
-			processor.setExcludedDatasources(
-					new HashSet<>(Arrays.asList(excludedDatasources.split(","))));
+		if (excludedDatasources != null && !excludedDatasources.trim().isEmpty()) {
+			processor
+					.setExcludedDatasources(new HashSet<>(List.of(excludedDatasources.split(","))));
 		}
 		return processor;
 	}
@@ -209,8 +228,9 @@ public class JavaMelodyAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "spring-monitoring-enabled", matchIfMissing = true)
+	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public MonitoringSpringAdvisor monitoringSpringAdvisor() {
-		return new MonitoringSpringAdvisor(new MonitoredWithAnnotationPointcut());
+		return new MonitoringSpringAdvisor(monitoredWithSpringAnnotationPointcut);
 	}
 
 	/**
@@ -219,8 +239,12 @@ public class JavaMelodyAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "spring-monitoring-enabled", matchIfMissing = true)
+	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public MonitoringSpringAdvisor monitoringSpringServiceAdvisor() {
-		return new MonitoringSpringAdvisor(new AnnotationMatchingPointcut(Service.class));
+		return createMonitoringSpringAdvisorWithExclusions(
+				new AnnotationMatchingPointcut(Service.class, true),
+				monitoredWithSpringAnnotationPointcut, asyncAnnotationPointcut,
+				scheduledAnnotationPointcut);
 	}
 
 	/**
@@ -229,18 +253,12 @@ public class JavaMelodyAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "spring-monitoring-enabled", matchIfMissing = true)
+	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public MonitoringSpringAdvisor monitoringSpringControllerAdvisor() {
-		return new MonitoringSpringAdvisor(new AnnotationMatchingPointcut(Controller.class));
-	}
-
-	/**
-	 * Monitoring of beans having the {@link RestController} annotation.
-	 * @return MonitoringSpringAdvisor
-	 */
-	@Bean
-	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "spring-monitoring-enabled", matchIfMissing = true)
-	public MonitoringSpringAdvisor monitoringSpringRestControllerAdvisor() {
-		return new MonitoringSpringAdvisor(new AnnotationMatchingPointcut(RestController.class));
+		return createMonitoringSpringAdvisorWithExclusions(
+				new AnnotationMatchingPointcut(Controller.class, true),
+				monitoredWithSpringAnnotationPointcut, asyncAnnotationPointcut,
+				scheduledAnnotationPointcut);
 	}
 
 	/**
@@ -249,10 +267,10 @@ public class JavaMelodyAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "spring-monitoring-enabled", matchIfMissing = true)
+	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public MonitoringSpringAdvisor monitoringSpringAsyncAdvisor() {
-		return new MonitoringSpringAdvisor(
-				Pointcuts.union(new AnnotationMatchingPointcut(Async.class),
-						new AnnotationMatchingPointcut(null, Async.class)));
+		return createMonitoringSpringAdvisorWithExclusions(asyncAnnotationPointcut,
+				monitoredWithSpringAnnotationPointcut, scheduledAnnotationPointcut);
 	}
 
 	/**
@@ -262,13 +280,27 @@ public class JavaMelodyAutoConfiguration {
 	@Bean
 	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "scheduled-monitoring-enabled", matchIfMissing = true)
 	@ConditionalOnMissingBean(DefaultAdvisorAutoProxyCreator.class)
+	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 	public MonitoringSpringAdvisor monitoringSpringScheduledAdvisor() {
-		// scheduled-monitoring-enabled was false by default because of #643,
-		// pending https://jira.spring.io/browse/SPR-15562,
-		// but true by default since 1.76 after adding dependency spring-boot-starter-aop
-		return new MonitoringSpringAdvisor(
-				Pointcuts.union(new AnnotationMatchingPointcut(null, Scheduled.class),
-						new AnnotationMatchingPointcut(null, Schedules.class)));
+		return createMonitoringSpringAdvisorWithExclusions(scheduledAnnotationPointcut,
+				monitoredWithSpringAnnotationPointcut, asyncAnnotationPointcut);
+	}
+
+	private MonitoringSpringAdvisor createMonitoringSpringAdvisorWithExclusions(Pointcut pointcut,
+			Pointcut... excludedPointcuts) {
+		final Pointcut myPointcut;
+		if (excludedPointcuts.length == 0) {
+			myPointcut = pointcut;
+		} else {
+			Pointcut excludedPointcut = excludedPointcuts[0];
+			if (excludedPointcuts.length > 1) {
+				for (int i = 1; i < excludedPointcuts.length; i++) {
+					excludedPointcut = Pointcuts.union(excludedPointcut, excludedPointcuts[i]);
+				}
+			}
+			myPointcut = new ExcludingPointcut(pointcut).exclude(excludedPointcut);
+		}
+		return new MonitoringSpringAdvisor(myPointcut);
 	}
 
 	/**
@@ -294,17 +326,20 @@ public class JavaMelodyAutoConfiguration {
 			protected String getRequestName(MethodInvocation invocation) {
 				final StringBuilder sb = new StringBuilder();
 				final Method method = invocation.getMethod();
-				final RequestMapping requestMapping = method.getAnnotation(RequestMapping.class);
-				if (requestMapping != null) {
-					String[] path = requestMapping.value();
-					if (path.length == 0) {
-						path = requestMapping.path();
-					}
+
+				final MergedAnnotations mergedAnnotations = MergedAnnotations.from(method,
+						MergedAnnotations.SearchStrategy.TYPE_HIERARCHY);
+				final MergedAnnotation<RequestMapping> requestMapping = mergedAnnotations
+						.get(RequestMapping.class);
+				if (requestMapping.isPresent()) {
+					String[] path = requestMapping.getStringArray("path");
 					if (path.length > 0) {
 						sb.append(path[0]);
 						sb.append(' ');
-						if (requestMapping.method().length > 0) {
-							sb.append(requestMapping.method()[0].name());
+						final RequestMethod[] requestMethods = requestMapping.getEnumArray("method",
+								RequestMethod.class);
+						if (requestMethods.length > 0) {
+							sb.append(requestMethods[0].name());
 						} else {
 							sb.append("GET");
 						}
@@ -329,6 +364,47 @@ public class JavaMelodyAutoConfiguration {
 	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "spring-monitoring-enabled", matchIfMissing = true)
 	public SpringRestTemplateBeanPostProcessor monitoringRestTemplateBeanPostProcessor() {
 		return new SpringRestTemplateBeanPostProcessor();
+	}
+
+	/**
+	 * Monitoring of MongoDbFactory beans.
+	 * @return SpringMongoDbFactoryBeanPostProcessor
+	 */
+	@Bean
+	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "spring-monitoring-enabled", matchIfMissing = true)
+	public SpringMongoDbFactoryBeanPostProcessor monitoringMongoDbFactoryBeanPostProcessor() {
+		return new SpringMongoDbFactoryBeanPostProcessor();
+	}
+
+	/**
+	 * Monitoring of ElasticsearchOperations beans.
+	 * @return SpringElasticsearchOperationsBeanPostProcessor
+	 */
+	@Bean
+	@ConditionalOnProperty(prefix = JavaMelodyConfigurationProperties.PREFIX, name = "spring-monitoring-enabled", matchIfMissing = true)
+	public SpringElasticsearchOperationsBeanPostProcessor monitoringElasticsearchOperationsBeanPostProcessor() {
+		return new SpringElasticsearchOperationsBeanPostProcessor();
+	}
+
+	/**
+	 * Configure Spring's Schedulers for Quartz Scheduler
+	 * @return SchedulerFactoryBeanCustomizer
+	 */
+	@ConditionalOnClass(name = {
+			"org.springframework.boot.autoconfigure.quartz.SchedulerFactoryBeanCustomizer",
+			"org.springframework.scheduling.quartz.SchedulerFactoryBean",
+			"org.quartz.JobListener" })
+	@Bean
+	@ConditionalOnMissingBean
+	public SchedulerFactoryBeanCustomizer schedulerFactoryBeanCustomizer() {
+		return new SchedulerFactoryBeanCustomizer() {
+			@Override
+			public void customize(SchedulerFactoryBean schedulerFactoryBean) {
+				final JobGlobalListener jobGlobalListener = new JobGlobalListener();
+				schedulerFactoryBean.setGlobalJobListeners(jobGlobalListener);
+				schedulerFactoryBean.setExposeSchedulerInRepository(true);
+			}
+		};
 	}
 
 	/**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -33,6 +33,7 @@ import net.bull.javamelody.internal.model.CacheInformations;
 import net.bull.javamelody.internal.model.Collector;
 import net.bull.javamelody.internal.model.Counter;
 import net.bull.javamelody.internal.model.CounterRequest;
+import net.bull.javamelody.internal.model.JCacheInformations;
 import net.bull.javamelody.internal.model.JRobin;
 import net.bull.javamelody.internal.model.JavaInformations;
 import net.bull.javamelody.internal.model.MemoryInformations;
@@ -41,19 +42,19 @@ import net.bull.javamelody.internal.model.TomcatInformations;
 /**
  * Produces a report of the data in {@link JavaInformations} in the Prometheus text format
  * to enable collection by a <a href='https://prometheus.io/'>Prometheus</a> server.
- *<br/><br/>
+ * <br/><br/>
  * Metric names have been adjusted to match Prometheus recommendations.
- *
+ * <p>
  * The {@link JavaInformations} fields to Prometheus metric mappings are done statically
  * to avoid any performance penalties of Java Reflection.  Additional metadata (description, type)
  * about each statistic is merged in as well.
- *
+ * <p>
  * In the spirit of JavaMelody, special attention is paid to performance so that exposing
  * these metrics should have very little performance overhead on applications.
- *
+ * <p>
  * This implementation directly outputs the Prometheus text format avoiding dependence on any
  * additional libraries.
- *<br/><br/>
+ * <br/><br/>
  * Exposed Metrics: <br/>
  * (From {@link JavaInformations})
  * <pre>
@@ -141,7 +142,7 @@ import net.bull.javamelody.internal.model.TomcatInformations;
  *  Additionally, the `lastValue` metrics can also be exported by adding the http parameter includeLastValue=true.
  *  Note: the `lastValue` metrics are already aggregated over time, where Prometheus prefers the raw counters and gauges.
  *  Also, obtaining the `lastValue` metrics appears to have a 5-10ms overhead.
- *
+ * <p>
  *  The `lastValue` metrics are DISABLED by default.
  *
  * @author https://github.com/slynn1324, Stefan Penndorf, Emeric Vernat
@@ -184,9 +185,11 @@ class PrometheusController {
 		assert out != null;
 		// it doesn't make much sense to use a JavaMelody collector server with Prometheus
 		// (which is effectively it's own collector server)
+		// and at least not for several nodes in a single application
 		if (javaInformations.size() > 1) {
 			throw new IOException(
-					"JavaMelody collector server not supported - configure Prometheus to scrape nodes.");
+					"Prometheus from collector server is not supported for several nodes in one application"
+							+ " - configure Prometheus to scrape nodes directly or declare several applications in the collector server.");
 		}
 		this.javaInformations = javaInformations.get(0);
 		this.collector = collector;
@@ -225,6 +228,9 @@ class PrometheusController {
 		if (javaInformations.isCacheEnabled()) {
 			reportOnCacheInformations();
 		}
+		if (javaInformations.isJCacheEnabled()) {
+			reportOnJCacheInformations();
+		}
 
 		reportOnCollector();
 
@@ -238,7 +244,7 @@ class PrometheusController {
 		// CHECKSTYLE:ON
 		final List<CacheInformations> cacheInformationsList = javaInformations
 				.getCacheInformationsList();
-		final Map<String, CacheInformations> cacheInfos = new LinkedHashMap<String, CacheInformations>(
+		final Map<String, CacheInformations> cacheInfos = new LinkedHashMap<>(
 				cacheInformationsList.size());
 		for (final CacheInformations cacheInfo : cacheInformationsList) {
 			final String fields = "{cache_name=\"" + sanitizeName(cacheInfo.getName()) + "\"}";
@@ -287,10 +293,36 @@ class PrometheusController {
 		}
 	}
 
+	private void reportOnJCacheInformations() { // NOPMD
+		final List<JCacheInformations> jcacheInformationsList = javaInformations
+				.getJCacheInformationsList();
+		final Map<String, JCacheInformations> cacheInfos = new LinkedHashMap<>(
+				jcacheInformationsList.size());
+		for (final JCacheInformations cacheInfo : jcacheInformationsList) {
+			final String fields = "{cache_name=\"" + sanitizeName(cacheInfo.getName()) + "\"}";
+			cacheInfos.put(fields, cacheInfo);
+		}
+		printHeader(MetricType.GAUGE, "jcache_hits_pct", "cache hits percent");
+		for (final Map.Entry<String, JCacheInformations> entry : cacheInfos.entrySet()) {
+			printDoubleWithFields("jcache_hits_pct", entry.getKey(),
+					(double) entry.getValue().getHitsRatio() / 100);
+		}
+		printHeader(MetricType.COUNTER, "jcache_hits_count", "total cache hit count");
+		for (final Map.Entry<String, JCacheInformations> entry : cacheInfos.entrySet()) {
+			printLongWithFields("jcache_hits_count", entry.getKey(),
+					entry.getValue().getCacheHits());
+		}
+		printHeader(MetricType.COUNTER, "jcache_misses_count", "total cache misses count");
+		for (final Map.Entry<String, JCacheInformations> entry : cacheInfos.entrySet()) {
+			printLongWithFields("jcache_misses_count", entry.getKey(),
+					entry.getValue().getCacheMisses());
+		}
+	}
+
 	// CHECKSTYLE:OFF
 	private void reportOnTomcatInformations() { // NOPMD
 		// CHECKSTYLE:ON
-		final Map<String, TomcatInformations> tcInfos = new LinkedHashMap<String, TomcatInformations>();
+		final Map<String, TomcatInformations> tcInfos = new LinkedHashMap<>();
 		for (final TomcatInformations tcInfo : javaInformations.getTomcatInformationsList()) {
 			if (tcInfo.getRequestCount() > 0) {
 				final String fields = "{tomcat_name=\"" + sanitizeName(tcInfo.getName()) + "\"}";
@@ -346,7 +378,7 @@ class PrometheusController {
 
 	/**
 	 * Reports on hits, errors, and duration sum for all counters in the collector.
-	 *
+	 * <p>
 	 * Bypasses the {@link JRobin#getLastValue()} methods to provide real-time counters as well as
 	 * improving performance from bypassing JRobin reads in the getLastValue() method.
 	 */
@@ -383,13 +415,13 @@ class PrometheusController {
 
 	/**
 	 * Includes the traditional 'graph' fields from the 'lastValue' API.
-	 *
+	 * <p>
 	 * These fields are summary fields aggregated over `javamelody.resolutions-seconds` (default 60), which
 	 * is normally an odd thing to pass to Prometheus.  Most (all?) of these can be calculated inside
 	 * Prometheus from the Collector stats.
-	 *
+	 * <p>
 	 * Note: This lookup seems to take the longest execution time -- 5-10ms per request due to JRobin reads.
-	 *
+	 * <p>
 	 * Disabled by default.  To enable set the 'prometheus-include-last-value' property to 'true'.
 	 *
 	 * @throws IOException e
@@ -425,7 +457,7 @@ class PrometheusController {
 			printLong(MetricType.COUNTER, "transactions_count", "transactions count",
 					javaInformations.getTransactionCount());
 			printLong(MetricType.GAUGE, "connections_used_count", "used connections count",
-					javaInformations.getActiveConnectionCount());
+					javaInformations.getUsedConnectionCount());
 			printLong(MetricType.GAUGE, "connections_active_count", "active connections",
 					javaInformations.getActiveConnectionCount());
 			if (javaInformations.getMaxConnectionCount() > 0) {
@@ -455,10 +487,10 @@ class PrometheusController {
 					"unix open file descriptors percentage",
 					javaInformations.getUnixOpenFileDescriptorPercentage());
 		}
-		if (javaInformations.getFreeDiskSpaceInTemp() >= 0) {
-			printLong(MetricType.GAUGE, "system_tmp_space_free_bytes", "tmp space available",
-					javaInformations.getFreeDiskSpaceInTemp());
-		}
+		printLong(MetricType.GAUGE, "system_tmp_space_free_bytes", "tmp space available",
+				javaInformations.getFreeDiskSpaceInTemp());
+		printLong(MetricType.GAUGE, "system_tmp_space_usable_bytes", "tmp space usable",
+				javaInformations.getUsableDiskSpaceInTemp());
 
 		// jvm
 		printLong(MetricType.GAUGE, "jvm_start_time", "jvm start time",
@@ -506,6 +538,25 @@ class PrometheusController {
 
 		printDouble(MetricType.COUNTER, "memory_gc_millis", "gc time millis",
 				memoryInformations.getGarbageCollectionTimeMillis());
+
+		if (memoryInformations.getUsedBufferedMemory() >= 0) {
+			printLong(MetricType.GAUGE, "memory_used_buffered_bytes",
+					"used buffered memory in bytes", memoryInformations.getUsedBufferedMemory());
+		}
+		printLong(MetricType.GAUGE, "memory_used_non_heap_bytes", "used non-heap memory in bytes",
+				memoryInformations.getUsedNonHeapMemory());
+		if (memoryInformations.getUsedSwapSpaceSize() >= 0) {
+			printLong(MetricType.GAUGE, "memory_used_swap_space_bytes",
+					"used memory in the OS swap space in bytes",
+					memoryInformations.getUsedSwapSpaceSize());
+		}
+		if (memoryInformations.getUsedPhysicalMemorySize() > 0) {
+			printLong(MetricType.GAUGE, "memory_used_physical_bytes",
+					"used memory in the OS in bytes",
+					memoryInformations.getUsedPhysicalMemorySize());
+		}
+		printLong(MetricType.GAUGE, "loaded_classes_count", "loaded classes count",
+				memoryInformations.getLoadedClassesCount());
 	}
 
 	/**

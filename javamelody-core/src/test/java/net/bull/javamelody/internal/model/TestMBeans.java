@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -17,10 +17,12 @@
  */
 package net.bull.javamelody.internal.model;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import javax.management.JMException;
 import javax.management.MBeanServer;
@@ -32,6 +34,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import net.bull.javamelody.Utils;
+import net.bull.javamelody.internal.common.I18N;
+import net.bull.javamelody.internal.model.MBeanNode.MBeanAttribute;
 import net.bull.javamelody.internal.model.TestTomcatInformations.GlobalRequestProcessor;
 import net.bull.javamelody.internal.model.TestTomcatInformations.ThreadPool;
 
@@ -42,7 +46,7 @@ import net.bull.javamelody.internal.model.TestTomcatInformations.ThreadPool;
 public class TestMBeans {
 	private MBeans mbeans;
 	private MBeanServer mBeanServer;
-	private final List<ObjectName> mbeansList = new ArrayList<ObjectName>();
+	private final List<ObjectName> mbeansList = new ArrayList<>();
 
 	/** Before.
 	 * @throws JMException e */
@@ -84,6 +88,14 @@ public class TestMBeans {
 				MBeansAccessor.getTomcatGlobalRequestProcessors());
 	}
 
+	@Test
+	public void testGetThreadAllocatedBytes() {
+		assertEquals("getThreadAllocatedBytes",
+				Math.round(ThreadInformations.getCurrentThreadAllocatedBytes() / 10000d),
+				Math.round((MBeansAccessor.getThreadAllocatedBytes(Thread.currentThread().getId())
+						- 432L) / 10000d));
+	}
+
 	/** Test.
 	 * @throws JMException e */
 	@Test
@@ -95,7 +107,25 @@ public class TestMBeans {
 	 * @throws JMException e */
 	@Test
 	public void testGetAllMBeanNodes() throws JMException {
-		assertNotNull("getAllMBeanNodes", MBeans.getAllMBeanNodes());
+		final List<MBeanNode> allMBeanNodes = MBeans.getAllMBeanNodes();
+		assertNotNull("getAllMBeanNodes", allMBeanNodes);
+		for (final MBeanNode mbeanNode : allMBeanNodes) {
+			assertNotNull("mbeanNode", mbeanNode);
+			assertNotNull("toString", mbeanNode.toString());
+		}
+	}
+
+	@Test
+	public void testToString() {
+		final MBeanNode mBeanNode = new MBeanNode("name", "description",
+				List.of(new MBeanAttribute("name", "description", "formattedValue")));
+		assertNotNull("mbeanNode", mBeanNode);
+		assertNotNull("toString", mBeanNode.toString());
+		assertNotNull("getAttributes", mBeanNode.getAttributes());
+		for (final MBeanAttribute attribute : mBeanNode.getAttributes()) {
+			assertNotNull("attribute", attribute);
+			assertNotNull("toString", attribute.toString());
+		}
 	}
 
 	/** Test. */
@@ -129,5 +159,68 @@ public class TestMBeans {
 		} catch (final IllegalArgumentException e) {
 			assertNotNull("e", e);
 		}
+	}
+
+	private String find(String name1, String name2, String name3, String attributeName)
+			throws JMException {
+		for (final MBeanNode mBeanNode : MBeans.getAllMBeanNodes()) {
+			for (final MBeanNode children : mBeanNode.getChildren()) {
+				if (children.getName().equals(name1)) {
+					for (final MBeanNode cc : children.getChildren()) {
+						if (cc.getName().equals(name2)) {
+							for (final MBeanNode ccc : cc.getChildren()) {
+								if (ccc.getName().equals(name3)) {
+									for (final MBeanAttribute aaa : ccc.getAttributes()) {
+										if (aaa.getName().equals(attributeName)) {
+											return aaa.getFormattedValue();
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	@Test
+	public void testGetConvertedAttribute_I18N() throws JMException {
+		final ObjectInstance mBean1 = mBeanServer.registerMBean(new ThreadPool() {
+			@Override
+			public int getmaxThreads() {
+				return 1234;
+			}
+
+		}, new ObjectName("Catalina:type=ThreadPool2"));
+		mbeansList.add(mBean1.getObjectName());
+
+		final String message = "testGetConvertedAttribute_I18N";
+		I18N.bindLocale(Locale.US);
+		assertEquals(message, "1,234",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "maxThreads"));
+		assertEquals(message, "{committed=1, init=10, max=100, used=1,000}",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "memoryUsage"));
+		I18N.bindLocale(Locale.FRANCE);
+		assertEquals(message, "1\u00a0234",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "maxThreads"));
+		assertEquals(message, "{committed=1, init=10, max=100, used=1\u00a0000}",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "memoryUsage"));
+		I18N.bindLocale(Locale.FRENCH);
+		assertEquals(message, "1\u00a0234",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "maxThreads"));
+		assertEquals(message, "{committed=1, init=10, max=100, used=1\u00a0000}",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "memoryUsage"));
+		I18N.bindLocale(Locale.ITALIAN);
+		assertEquals(message, "1.234",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "maxThreads"));
+		assertEquals(message, "{committed=1, init=10, max=100, used=1.000}",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "memoryUsage"));
+		I18N.bindLocale(Locale.ITALY);
+		assertEquals(message, "1.234",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "maxThreads"));
+		assertEquals(message, "{committed=1, init=10, max=100, used=1.000}",
+				find("Catalina", "ThreadPool2", "Catalina:type=ThreadPool2", "memoryUsage"));
 	}
 }

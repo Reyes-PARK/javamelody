@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -23,9 +23,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.SessionListener;
 import net.bull.javamelody.internal.common.HttpParameter;
 import net.bull.javamelody.internal.common.HttpPart;
@@ -59,7 +58,7 @@ import net.bull.javamelody.internal.web.pdf.PdfReport;
 class PdfController {
 	private static final String RANGE_KEY = "range";
 	private static final String JAVA_INFORMATIONS_LIST_KEY = "javaInformationsList";
-	private static final RequestToMethodMapper<PdfController> REQUEST_TO_METHOD_MAPPER = new RequestToMethodMapper<PdfController>(
+	private static final RequestToMethodMapper<PdfController> REQUEST_TO_METHOD_MAPPER = new RequestToMethodMapper<>(
 			PdfController.class);
 	private final HttpCookieManager httpCookieManager = new HttpCookieManager();
 	private final Collector collector;

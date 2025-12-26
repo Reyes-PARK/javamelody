@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -22,13 +22,13 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import net.bull.javamelody.JdbcWrapper;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.SessionListener;
@@ -43,6 +43,7 @@ import net.bull.javamelody.internal.model.Collector;
 import net.bull.javamelody.internal.model.CollectorServer;
 import net.bull.javamelody.internal.model.DatabaseInformations;
 import net.bull.javamelody.internal.model.HeapHistogram;
+import net.bull.javamelody.internal.model.JCacheInformations;
 import net.bull.javamelody.internal.model.JavaInformations;
 import net.bull.javamelody.internal.model.JndiBinding;
 import net.bull.javamelody.internal.model.MBeanNode;
@@ -63,8 +64,10 @@ import net.bull.javamelody.internal.web.html.HtmlReport;
  */
 public class HtmlController {
 	static final String HTML_BODY_FORMAT = "htmlbody";
+	private static final boolean CONTENT_SECURITY_POLICY_ENABLED = Parameter.CONTENT_SECURITY_POLICY_ENABLED
+			.getValue() == null || Parameter.CONTENT_SECURITY_POLICY_ENABLED.getValueAsBoolean();
 	private static final String X_FRAME_OPTIONS = Parameter.X_FRAME_OPTIONS.getValue();
-	private static final RequestToMethodMapper<HtmlController> REQUEST_TO_METHOD_MAPPER = new RequestToMethodMapper<HtmlController>(
+	private static final RequestToMethodMapper<HtmlController> REQUEST_TO_METHOD_MAPPER = new RequestToMethodMapper<>(
 			HtmlController.class);
 	private final HttpCookieManager httpCookieManager = new HttpCookieManager();
 	private final Collector collector;
@@ -95,8 +98,7 @@ public class HtmlController {
 		}
 
 		// simple appel de monitoring sans format
-		final BufferedWriter writer = getWriter(httpResponse);
-		try {
+		try (BufferedWriter writer = getWriter(httpResponse)) {
 			final Range range = httpCookieManager.getRange(httpRequest, httpResponse);
 			this.htmlReport = new HtmlReport(collector, collectorServer, javaInformationsList,
 					range, writer);
@@ -108,8 +110,6 @@ public class HtmlController {
 			} else {
 				REQUEST_TO_METHOD_MAPPER.invoke(httpRequest, this);
 			}
-		} finally {
-			writer.close();
 		}
 	}
 
@@ -121,13 +121,27 @@ public class HtmlController {
 
 	public static BufferedWriter getWriter(HttpServletResponse httpResponse) throws IOException {
 		httpResponse.setContentType("text/html; charset=UTF-8");
+		if (CONTENT_SECURITY_POLICY_ENABLED) {
+			final String analyticsId = Parameter.ANALYTICS_ID.getValue();
+			final boolean analyticsEnabled = analyticsId != null && !"disabled".equals(analyticsId);
+			httpResponse.setHeader("Content-Security-Policy",
+					"default-src 'self'"
+							+ (analyticsEnabled ? " https://ssl.google-analytics.com" : "")
+							+ "; object-src 'none';");
+		}
 		if (X_FRAME_OPTIONS == null) {
 			// default value of X-Frame-Options is SAMEORIGIN
 			httpResponse.setHeader("X-Frame-Options", "SAMEORIGIN");
 		} else if (!"ALLOWALL".equals(X_FRAME_OPTIONS)) {
 			httpResponse.setHeader("X-Frame-Options", X_FRAME_OPTIONS);
 		}
-		return new BufferedWriter(new OutputStreamWriter(httpResponse.getOutputStream(), "UTF-8"));
+		try {
+			return new BufferedWriter(
+					new OutputStreamWriter(httpResponse.getOutputStream(), StandardCharsets.UTF_8));
+		} catch (final IllegalStateException e) {
+			// just in case, if httpResponse.getWriter() was already called (for an exception in PrometheusController for example)
+			return new BufferedWriter(httpResponse.getWriter());
+		}
 	}
 
 	@RequestPart(HttpPart.GRAPH)
@@ -338,6 +352,25 @@ public class HtmlController {
 				withoutHeaders);
 	}
 
+	@RequestPart(HttpPart.JCACHE_KEYS)
+	void doJCacheKeys(@RequestParameter(HttpParameter.CACHE_ID) String cacheId,
+			@RequestParameter(HttpParameter.FORMAT) String format) throws IOException {
+		assert !isFromCollectorServer();
+		final JCacheInformations cacheInfo = JCacheInformations
+				.buildJCacheInformationsWithKeys(cacheId);
+		final boolean withoutHeaders = HTML_BODY_FORMAT.equalsIgnoreCase(format);
+		final String jcacheKeysPart = HttpPart.JCACHE_KEYS.toString() + '&' + HttpParameter.CACHE_ID
+				+ '=' + I18N.urlEncode(cacheId);
+		htmlReport.writeJCacheWithKeys(cacheId, cacheInfo, messageForReport, jcacheKeysPart,
+				withoutHeaders);
+	}
+
+	@RequestPart(HttpPart.HASH_PASSWORD)
+	void doHashPassword(@RequestParameter(HttpParameter.ALGORITHM) String algorithm,
+			@RequestParameter(HttpParameter.REQUEST) String password) throws IOException {
+		htmlReport.writeHashPassword(algorithm, password);
+	}
+
 	void writeHtmlToLastShutdownFile() {
 		try {
 			final File dir = Parameters.getStorageDirectory(getApplication());
@@ -345,16 +378,13 @@ public class HtmlController {
 				throw new IOException("JavaMelody directory can't be created: " + dir.getPath());
 			}
 			final File lastShutdownFile = new File(dir, "last_shutdown.html");
-			final BufferedWriter writer = new BufferedWriter(new FileWriter(lastShutdownFile));
-			try {
+			try (BufferedWriter writer = new BufferedWriter(new FileWriter(lastShutdownFile))) {
 				final JavaInformations javaInformations = new JavaInformations(
 						Parameters.getServletContext(), true);
 				// on pourrait faire I18N.bindLocale(Locale.getDefault()), mais cela se fera tout seul
 				final HtmlReport myHtmlReport = new HtmlReport(collector, collectorServer,
 						Collections.singletonList(javaInformations), Period.JOUR, writer);
 				myHtmlReport.writeLastShutdown();
-			} finally {
-				writer.close();
 			}
 		} catch (final IOException e) {
 			LOG.warn("exception while writing the last shutdown report", e);

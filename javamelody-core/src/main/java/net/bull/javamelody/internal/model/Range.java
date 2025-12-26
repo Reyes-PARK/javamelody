@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -133,7 +133,7 @@ public final class Range implements Serializable {
 			endDate = new Date();
 		}
 
-		return Range.createCustomRange(startDate, endDate);
+		return createCustomRange(startDate, endDate);
 	}
 
 	public Period getPeriod() {

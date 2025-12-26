@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -80,7 +80,7 @@ public class MBeanNode implements Serializable {
 		super();
 		this.name = name;
 		this.description = null;
-		this.children = new ArrayList<MBeanNode>();
+		this.children = new ArrayList<>();
 		this.attributes = null;
 	}
 
@@ -101,11 +101,11 @@ public class MBeanNode implements Serializable {
 	}
 
 	public List<MBeanNode> getChildren() {
-		return children != null ? children : null;
+		return children;
 	}
 
 	public List<MBeanAttribute> getAttributes() {
-		return attributes != null ? attributes : null;
+		return attributes;
 	}
 
 	/** {@inheritDoc} */

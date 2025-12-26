@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -22,8 +22,8 @@ import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import javax.servlet.ServletContext;
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.http.HttpSession;
 
 /**
  * Implementation test de HttpSession.
@@ -37,7 +37,7 @@ public class SessionTestImpl implements HttpSession {
 
 	public SessionTestImpl(boolean serializable) {
 		super();
-		attributes = new LinkedHashMap<String, Object>();
+		attributes = new LinkedHashMap<>();
 		if (serializable) {
 			attributes.put(SessionListener.SESSION_COUNTRY_KEY, "fr");
 			attributes.put(SessionListener.SESSION_REMOTE_ADDR, "localhost");
@@ -122,7 +122,7 @@ public class SessionTestImpl implements HttpSession {
 	 *  @return HttpSessionContext */
 	@Override
 	@Deprecated
-	public javax.servlet.http.HttpSessionContext getSessionContext() {
+	public jakarta.servlet.http.HttpSessionContext getSessionContext() {
 		return null;
 	}
 

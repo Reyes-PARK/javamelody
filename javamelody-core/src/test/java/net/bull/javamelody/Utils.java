@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -21,14 +21,14 @@ import java.io.File;
 import java.util.HashSet;
 import java.util.Map;
 
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletContext;
-
+import net.bull.javamelody.internal.model.RrdFfmBackendFactory;
 import org.jrobin.core.RrdBackendFactory;
 import org.jrobin.core.RrdException;
 import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
 
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletContext;
 import net.bull.javamelody.internal.common.Parameters;
 import net.bull.javamelody.internal.model.JRobin;
 import net.bull.javamelody.internal.model.RrdNioBackendFactory;
@@ -58,7 +58,7 @@ public final class Utils {
 	}
 
 	public static void initialize() {
-		for (final Object systemProperty : new HashSet<Object>(System.getProperties().keySet())) {
+		for (final Object systemProperty : new HashSet<>(System.getProperties().keySet())) {
 			if (systemProperty.toString().startsWith(Parameters.PARAMETER_SYSTEM_PREFIX)) {
 				System.getProperties().remove(systemProperty.toString());
 			}
@@ -66,8 +66,7 @@ public final class Utils {
 		JRobin.stop();
 		if (isQuartzSchedulerStarted()) {
 			try {
-				// shutdown seems needed at the moment in order that this job does not run forever:
-				// https://javamelody.ci.cloudbees.com/job/javamelody/
+				// shutdown seems needed at the moment in order that continuous integration does not run forever
 				StdSchedulerFactory.getDefaultScheduler().shutdown();
 			} catch (final SchedulerException e) {
 				throw new IllegalStateException(e);
@@ -86,9 +85,18 @@ public final class Utils {
 
 		try {
 			// we must initialize default factory before creating any rrd
-			if (!RrdBackendFactory.getDefaultFactory().getFactoryName()
-					.equals(RrdNioBackendFactory.FACTORY_NAME)) {
-				RrdBackendFactory.registerAndSetAsDefaultFactory(new RrdNioBackendFactory());
+			final boolean java22OrLater = "22".compareTo(Parameters.JAVA_VERSION) < 0;
+			if (java22OrLater) {
+				// we can use Foreign Function and Memory api since java 22
+				if (!RrdBackendFactory.getDefaultFactory().getFactoryName()
+						.equals(RrdFfmBackendFactory.FACTORY_NAME)) {
+					RrdBackendFactory.registerAndSetAsDefaultFactory(new RrdFfmBackendFactory());
+				}
+			} else {
+				if (!RrdBackendFactory.getDefaultFactory().getFactoryName()
+						.equals(RrdNioBackendFactory.FACTORY_NAME)) {
+					RrdBackendFactory.registerAndSetAsDefaultFactory(new RrdNioBackendFactory());
+				}
 			}
 		} catch (final RrdException e) {
 			throw new IllegalStateException(e);

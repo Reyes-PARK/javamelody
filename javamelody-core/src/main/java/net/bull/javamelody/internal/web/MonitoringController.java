@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -25,15 +25,15 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
-
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import net.bull.javamelody.Parameter;
 import net.bull.javamelody.SessionListener;
 import net.bull.javamelody.internal.common.HttpParameter;
@@ -154,13 +154,15 @@ public class MonitoringController {
 		// javaInformations doit être réinstanciée et doit être après executeActionIfNeeded
 		// pour avoir des informations à jour
 		final JavaInformations javaInformations;
-		if (MonitoringController.isJavaInformationsNeeded(httpRequest)) {
+		if (isJavaInformationsNeeded(httpRequest)) {
 			javaInformations = new JavaInformations(servletContext, true);
 		} else {
 			javaInformations = null;
 		}
 
 		doReport(httpRequest, httpResponse, Collections.singletonList(javaInformations));
+
+		httpResponse.flushBuffer();
 	}
 
 	public void doReport(HttpServletRequest httpRequest, HttpServletResponse httpResponse,
@@ -202,8 +204,8 @@ public class MonitoringController {
 				final String path = HttpParameter.PATH.getParameterFrom(httpRequest);
 				doHsErrPid(httpResponse, javaInformationsList, path);
 			} else if (HttpParameter.REPORT.getParameterFrom(httpRequest) != null) {
-				final String reportName = URLDecoder
-						.decode(HttpParameter.REPORT.getParameterFrom(httpRequest), "UTF-8");
+				final String reportName = URLDecoder.decode(
+						HttpParameter.REPORT.getParameterFrom(httpRequest), StandardCharsets.UTF_8);
 				doCustomReport(httpRequest, httpResponse, reportName);
 			} else {
 				doReportCore(httpRequest, httpResponse, javaInformationsList);
@@ -232,15 +234,23 @@ public class MonitoringController {
 			final PdfController pdfController = new PdfController(collector, collectorServer);
 			pdfController.doPdf(httpRequest, httpResponse, javaInformationsList);
 		} else if ("prometheus".equalsIgnoreCase(format)) {
-			httpResponse.setContentType("text/plain; version=0.0.4;charset=UTF-8");
 			final boolean includeLastValue = Boolean
 					.parseBoolean(httpRequest.getParameter("includeLastValue"));
-			final PrometheusController prometheusController = new PrometheusController(
-					javaInformationsList, collector, httpResponse.getWriter());
-			prometheusController.report(includeLastValue);
+			doPrometheus(httpResponse, javaInformationsList, includeLastValue);
 		} else {
 			doCompressedSerializable(httpRequest, httpResponse, javaInformationsList);
 		}
+	}
+
+	public void doPrometheus(HttpServletResponse httpResponse,
+			List<JavaInformations> javaInformationsList, final boolean includeLastValue)
+			throws IOException {
+		httpResponse.setContentType("text/plain; version=0.0.4;charset=UTF-8");
+		final PrometheusController prometheusController = new PrometheusController(
+				javaInformationsList, collector, httpResponse.getWriter());
+		prometheusController.report(includeLastValue);
+
+		httpResponse.getWriter().flush();
 	}
 
 	public static void noCache(HttpServletResponse httpResponse) {
@@ -263,20 +273,11 @@ public class MonitoringController {
 		}
 		final HtmlController htmlController = new HtmlController(collector, collectorServer,
 				messageForReport, anchorNameForRedirect);
-		// on teste CompressionServletResponseWrapper car il peut déjà être mis dans le serveur de collecte
-		// par CollectorServlet.doCompressedPart
-		if (isCompressionSupported(httpRequest)
-				&& !(httpResponse instanceof CompressionServletResponseWrapper)
-				// this checks if it is the Jenkins plugin
-				// (another filter may already compress the stream, in which case we must not compress a second time,
-				// in particular for org.kohsuke.stapler.compression.CompressionFilter
-				// from https://github.com/stapler/stapler in Jenkins v1.470+ (issue JENKINS-14050)
-				&& !GZIP_COMPRESSION_DISABLED) {
+		if (isCompressionSupported(httpRequest, httpResponse)) {
 			// comme la page html peut être volumineuse avec toutes les requêtes sql et http
 			// on compresse le flux de réponse en gzip à partir de 4 Ko
 			// (à moins que la compression http ne soit pas supportée
 			// comme par ex s'il y a un proxy squid qui ne supporte que http 1.0)
-
 			final CompressionServletResponseWrapper wrappedResponse = new CompressionServletResponseWrapper(
 					httpResponse, 4096);
 			try {
@@ -324,12 +325,8 @@ public class MonitoringController {
 			HttpServletResponse httpResponse, Serializable serializable) throws IOException {
 		// note: normalement la compression est supportée ici car s'il s'agit du serveur de collecte,
 		// LabradorRetriever appelle connection.setRequestProperty("Accept-Encoding", "gzip");
-		// et on teste CompressionServletResponseWrapper car il peut déjà être mis dans le serveur de collecte
-		// par CollectorServlet.doCompressedPart
 		final SerializableController serializableController = new SerializableController(collector);
-		if (isCompressionSupported(httpRequest)
-				&& !(httpResponse instanceof CompressionServletResponseWrapper)
-				&& !GZIP_COMPRESSION_DISABLED) {
+		if (isCompressionSupported(httpRequest, httpResponse)) {
 			// comme les données peuvent être volumineuses avec toutes les requêtes sql et http
 			// et les threads on compresse le flux de réponse en gzip à partir de 50 Ko
 			// (à moins que la compression http ne soit pas supportée
@@ -350,19 +347,16 @@ public class MonitoringController {
 			throws IOException {
 		// on enlève tout ".." dans le paramètre par sécurité
 		final String localResource = Parameters.getResourcePath(resource.replace("..", ""));
-		final InputStream resourceAsStream = MonitoringController.class
-				.getResourceAsStream(localResource);
-		if (resourceAsStream == null) {
-			httpResponse.sendError(HttpServletResponse.SC_NOT_FOUND, "Resource not found");
-			return;
-		}
-		try {
+		try (final InputStream resourceAsStream = MonitoringController.class
+				.getResourceAsStream(localResource)) {
+			if (resourceAsStream == null) {
+				httpResponse.sendError(HttpServletResponse.SC_NOT_FOUND, "Resource not found");
+				return;
+			}
 			addHeadersForResource(httpResponse, localResource);
 
 			final OutputStream out = httpResponse.getOutputStream();
 			InputOutput.pump(resourceAsStream, out);
-		} finally {
-			resourceAsStream.close();
 		}
 	}
 
@@ -383,24 +377,47 @@ public class MonitoringController {
 
 	private void doGraph(HttpServletRequest httpRequest, HttpServletResponse httpResponse,
 			Range range, String graphName) throws IOException {
-		final int width = Math
-				.min(Integer.parseInt(HttpParameter.WIDTH.getParameterFrom(httpRequest)), 1600);
-		final int height = Math
-				.min(Integer.parseInt(HttpParameter.HEIGHT.getParameterFrom(httpRequest)), 1600);
-		final String max = HttpParameter.MAX.getParameterFrom(httpRequest);
-		final boolean maxHidden = max != null && !Boolean.parseBoolean(max);
 		final JRobin jrobin = collector.getJRobin(graphName);
 		if (jrobin != null) {
-			final byte[] img = jrobin.graph(range, width, height, maxHidden);
-			// png comme indiqué dans la classe jrobin
-			httpResponse.setContentType("image/png");
-			httpResponse.setContentLength(img.length);
-			final String fileName = graphName + ".png";
-			// encoding des CRLF pour http://en.wikipedia.org/wiki/HTTP_response_splitting
-			httpResponse.addHeader("Content-Disposition",
-					"inline;filename=" + fileName.replace('\n', '_').replace('\r', '_'));
-			httpResponse.getOutputStream().write(img);
-			httpResponse.flushBuffer();
+			final String format = HttpParameter.FORMAT.getParameterFrom(httpRequest);
+			if ("xml".equals(format)) {
+				// any charset is ok
+				httpResponse.setContentType("text/xml; charset=UTF-8");
+				if (isCompressionSupported(httpRequest, httpResponse)) {
+					final CompressionServletResponseWrapper wrappedResponse = new CompressionServletResponseWrapper(
+							httpResponse, 4096);
+					try {
+						jrobin.dumpXml(wrappedResponse.getOutputStream(), range);
+					} finally {
+						wrappedResponse.finishResponse();
+					}
+				} else {
+					jrobin.dumpXml(httpResponse.getOutputStream(), range);
+				}
+			} else if ("txt".equals(format)) {
+				// any charset is ok
+				httpResponse.setContentType("text/plain; charset=UTF-8");
+				final String txt = jrobin.dumpTxt(range);
+				httpResponse.setContentLength(txt.length());
+				httpResponse.getWriter().write(txt);
+			} else {
+				final int width = Math.min(
+						Integer.parseInt(HttpParameter.WIDTH.getParameterFrom(httpRequest)), 1600);
+				final int height = Math.min(
+						Integer.parseInt(HttpParameter.HEIGHT.getParameterFrom(httpRequest)), 1600);
+				final String max = HttpParameter.MAX.getParameterFrom(httpRequest);
+				final boolean maxHidden = max != null && !Boolean.parseBoolean(max);
+				final byte[] img = jrobin.graph(range, width, height, maxHidden);
+				// png comme indiqué dans la classe jrobin
+				httpResponse.setContentType("image/png");
+				httpResponse.setContentLength(img.length);
+				final String fileName = graphName + ".png";
+				// encoding des CRLF pour http://en.wikipedia.org/wiki/HTTP_response_splitting
+				httpResponse.addHeader("Content-Disposition",
+						"inline;filename=" + fileName.replace('\n', '_').replace('\r', '_'));
+				httpResponse.getOutputStream().write(img);
+				httpResponse.flushBuffer();
+			}
 		}
 	}
 
@@ -443,10 +460,8 @@ public class MonitoringController {
 		httpResponse.addHeader("Content-Disposition", "inline;filename=web.xml");
 		final InputStream in = getWebXmlAsStream();
 		if (in != null) {
-			try {
+			try (in) {
 				InputOutput.pump(in, out);
-			} finally {
-				in.close();
 			}
 		}
 	}
@@ -459,10 +474,8 @@ public class MonitoringController {
 		httpResponse.addHeader("Content-Disposition", "inline;filename=pom.xml");
 		final InputStream in = MavenArtifact.getWebappPomXmlAsStream();
 		if (in != null) {
-			try {
+			try (in) {
 				InputOutput.pump(in, out);
-			} finally {
-				in.close();
 			}
 		}
 	}
@@ -520,7 +533,18 @@ public class MonitoringController {
 		}
 	}
 
-	static boolean isCompressionSupported(HttpServletRequest httpRequest) {
+	static boolean isCompressionSupported(HttpServletRequest httpRequest,
+			HttpServletResponse httpResponse) {
+		// GZIP_COMPRESSION_DISABLED checks if it is the Jenkins plugin
+		// (another filter may already compress the stream, in which case we must not compress a second time,
+		// in particular for org.kohsuke.stapler.compression.CompressionFilter
+		// from https://github.com/stapler/stapler in Jenkins v1.470+ (issue JENKINS-14050)
+		// et on teste CompressionServletResponseWrapper car il peut déjà être mis dans le serveur de collecte
+		// par CollectorController.doCompressedPart
+		if (GZIP_COMPRESSION_DISABLED
+				|| httpResponse instanceof CompressionServletResponseWrapper) {
+			return false;
+		}
 		// est-ce que le navigateur déclare accepter la compression gzip ?
 		boolean supportCompression = false;
 		final List<String> acceptEncodings = Collections

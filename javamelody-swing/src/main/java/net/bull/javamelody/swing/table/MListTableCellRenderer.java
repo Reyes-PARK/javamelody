@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -42,7 +42,7 @@ public class MListTableCellRenderer extends MDefaultTableCellRenderer {
 			final Iterator<?> iterator = collection.iterator();
 			final int maxIndex = collection.size() - 1;
 			for (int i = 0; i <= maxIndex; i++) {
-				stringBuffer.append(String.valueOf(iterator.next()));
+				stringBuffer.append(iterator.next());
 				if (i < maxIndex) {
 					stringBuffer.append(", ");
 				}

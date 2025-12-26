@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -51,10 +51,11 @@ enum PdfFonts {
 	TABLE_HEADER(getFont(5.5f, Font.BOLD));
 
 	private static final String UKRAINIAN_LANGUAGE = "uk";
+	private static final String CZECH_LANGUAGE = "cs";
 
 	static {
 		BLUE.font.setColor(Color.BLUE);
-		INFO_CELL.font.setColor(Color.GREEN);
+		INFO_CELL.font.setColor(Color.GREEN.darker());
 		WARNING_CELL.font.setColor(Color.ORANGE);
 		SEVERE_CELL.font.setColor(Color.RED);
 	}
@@ -73,7 +74,7 @@ enum PdfFonts {
 		final String language = I18N.getResourceBundle().getLocale().getLanguage();
 		if (Locale.CHINESE.getLanguage().equals(language)) {
 			return getChineseFont();
-		} else if (UKRAINIAN_LANGUAGE.equals(language)) {
+		} else if (UKRAINIAN_LANGUAGE.equals(language) || CZECH_LANGUAGE.equals(language)) {
 			return getDejaVuSansFont();
 		}
 		return font;
@@ -103,9 +104,7 @@ enum PdfFonts {
 					chineseBaseFont = BaseFont.createFont("STSong-Light", "UniGB-UCS2-H",
 							BaseFont.NOT_EMBEDDED);
 				}
-			} catch (final DocumentException e) {
-				throw new IllegalStateException(e);
-			} catch (final IOException e) {
+			} catch (final DocumentException | IOException e) {
 				throw new IllegalStateException(e);
 			}
 		}
@@ -129,21 +128,15 @@ enum PdfFonts {
 			final Properties cjkEncodings = (Properties) cjkEncodingsField.get(null);
 
 			if (cjkFonts.isEmpty()) {
-				final InputStream is = BaseFont.getResourceStream(
-						BaseFont.RESOURCE_PATH + "cjkfonts.properties.renamedForIssue258");
-				try {
+				try (InputStream is = BaseFont.getResourceStream(
+						BaseFont.RESOURCE_PATH + "cjkfonts.properties.renamedForIssue258")) {
 					cjkFonts.load(is);
-				} finally {
-					is.close();
 				}
 			}
 			if (cjkEncodings.isEmpty()) {
-				final InputStream is = BaseFont.getResourceStream(
-						BaseFont.RESOURCE_PATH + "cjkencodings.properties.renamedForIssue258");
-				try {
+				try (InputStream is = BaseFont.getResourceStream(
+						BaseFont.RESOURCE_PATH + "cjkencodings.properties.renamedForIssue258")) {
 					cjkEncodings.load(is);
-				} finally {
-					is.close();
 				}
 			}
 		} catch (final Exception e) {
@@ -174,9 +167,7 @@ enum PdfFonts {
 					} finally {
 						input.close();
 					}
-				} catch (final IOException e) {
-					throw new IllegalStateException(e);
-				} catch (final DocumentException e) {
+				} catch (final IOException | DocumentException e) {
 					throw new IllegalStateException(e);
 				}
 			}

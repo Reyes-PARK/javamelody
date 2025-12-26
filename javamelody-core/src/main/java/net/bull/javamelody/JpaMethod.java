@@ -1,5 +1,5 @@
 /*
- * Copyright 2008-2017 by Emeric Vernat
+ * Copyright 2008-2019 by Emeric Vernat
  *
  *     This file is part of Java Melody.
  *
@@ -20,7 +20,7 @@ package net.bull.javamelody;
 import java.io.Serializable;
 import java.lang.reflect.Method;
 
-import javax.persistence.Query;
+import jakarta.persistence.Query;
 
 /**
  * @author Christoph Linder
@@ -71,12 +71,12 @@ enum JpaMethod {
 	}
 
 	static JpaMethod forCall(Method method, Object[] args) {
-		for (final JpaMethod type : JpaMethod.values()) {
+		for (final JpaMethod type : values()) {
 			if (type.matcher.matches(type, method, args)) {
 				return type;
 			}
 		}
-		return JpaMethod.OTHER;
+		return OTHER;
 	}
 
 	boolean isMonitored() {
